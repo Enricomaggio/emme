@@ -142,7 +142,7 @@ export const quoteStatusEnum = ["DRAFT", "SENT", "ACCEPTED", "REJECTED"] as cons
 export type QuoteStatus = typeof quoteStatusEnum[number];
 
 // Enum per tipo riga preventivo (Catalogo Lattoneria)
-export const quoteItemTypeEnum = ["LATTONERIA", "ARTICOLO", "GIORNATE"] as const;
+export const quoteItemTypeEnum = ["LATTONERIA", "ARTICOLO", "GIORNATE", "MANUALE"] as const;
 export type QuoteItemType = typeof quoteItemTypeEnum[number];
 
 // Enum per fase riga preventivo (6 fasi Excel-style)

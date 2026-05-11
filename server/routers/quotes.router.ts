@@ -55,10 +55,21 @@ const giornateItemSchema = itemBaseSchema.extend({
   quantity: z.coerce.number().positive("Giorni devono essere > 0"),
 });
 
+const manualeItemSchema = z.object({
+  id: z.string().optional(),
+  type: z.literal("MANUALE"),
+  description: z.string().trim().min(1, "Descrizione obbligatoria"),
+  unitOfMeasure: z.string().trim().min(1, "Unità di misura obbligatoria"),
+  quantity: z.coerce.number().positive("Quantità deve essere > 0"),
+  unitCost: z.coerce.number().min(0, "Costo unitario deve essere >= 0"),
+  marginPercent: z.coerce.number().min(0).max(10000).optional(),
+});
+
 const quoteItemInputSchema = z.discriminatedUnion("type", [
   lattoneriaItemSchema,
   articoloItemSchema,
   giornateItemSchema,
+  manualeItemSchema,
 ]);
 type QuoteItemInput = z.infer<typeof quoteItemInputSchema>;
 
@@ -191,6 +202,31 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       materialThicknessId: null,
       materialFinishId: null,
       catalogArticleId: article.id,
+      laborRateId: null,
+    };
+  }
+
+  if (input.type === "MANUALE") {
+    const quantity = Number(input.quantity);
+    const unitCost = Number(input.unitCost);
+    const margin = input.marginPercent !== undefined ? Number(input.marginPercent) : 0;
+    const unitPriceApplied = unitCost * (1 + margin / 100);
+    const totalRow = quantity * unitPriceApplied;
+    return {
+      type: "MANUALE",
+      description: input.description.trim(),
+      unitOfMeasure: input.unitOfMeasure.trim(),
+      developmentMm: null,
+      quantity: String(round4(quantity)),
+      weightKg: null,
+      unitCost: String(round4(unitCost)),
+      marginPercent: String(round2(margin)),
+      unitPriceApplied: String(round2(unitPriceApplied)),
+      totalRow: String(round2(totalRow)),
+      materialId: null,
+      materialThicknessId: null,
+      materialFinishId: null,
+      catalogArticleId: null,
       laborRateId: null,
     };
   }

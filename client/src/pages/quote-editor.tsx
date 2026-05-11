@@ -90,6 +90,8 @@ interface QuoteItemDraft {
   catalogArticleId?: string;
   // GIORNATE
   laborRateId?: string;
+  // MANUALE
+  unitCost?: string;
   quantity: string;
   marginPercent?: string; // optional override
   // For display only — frozen on saved items
@@ -121,6 +123,14 @@ type QuoteItemPayload =
       quantity: string;
       marginPercent?: string;
       laborRateId: string;
+    }
+  | {
+      type: "MANUALE";
+      description: string;
+      unitOfMeasure: string;
+      quantity: string;
+      unitCost: string;
+      marginPercent?: string;
     };
 
 interface QuoteSavePayload {
@@ -151,6 +161,7 @@ interface QuoteResponse {
     unitOfMeasure: string | null;
     developmentMm: string | null;
     quantity: string;
+    unitCost: string | null;
     marginPercent: string | null;
     unitPriceApplied: string;
     totalRow: string;
@@ -189,6 +200,14 @@ const giornateFormSchema = z.object({
   laborRateId: z.string().min(1, "Seleziona una manodopera"),
   quantity: z.string().refine((v) => parseFloat(v) > 0, { message: "Giorni > 0" }),
   description: z.string().optional(),
+  marginPercent: z.string().optional(),
+});
+
+const manualeFormSchema = z.object({
+  description: z.string().trim().min(1, "Descrizione obbligatoria"),
+  unitOfMeasure: z.string().trim().min(1, "Unità di misura obbligatoria"),
+  quantity: z.string().refine((v) => parseFloat(v) > 0, { message: "Quantità deve essere > 0" }),
+  unitCost: z.string().refine((v) => parseFloat(v) >= 0, { message: "Costo unitario >= 0" }),
   marginPercent: z.string().optional(),
 });
 
@@ -233,6 +252,7 @@ function AddRowDialog({ open, onClose, onAdd, materials, articleFamilies, laborR
               <SelectItem value="LATTONERIA" data-testid="option-lattoneria">Lattoneria (sviluppo × metri)</SelectItem>
               <SelectItem value="ARTICOLO" data-testid="option-articolo">Articolo (catalogo)</SelectItem>
               <SelectItem value="GIORNATE" data-testid="option-giornate">Manodopera (giornate)</SelectItem>
+              <SelectItem value="MANUALE" data-testid="option-manuale">Voce manuale (one-off)</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -245,6 +265,9 @@ function AddRowDialog({ open, onClose, onAdd, materials, articleFamilies, laborR
         )}
         {type === "GIORNATE" && (
           <GiornateForm laborRates={laborRates} onSubmit={handleSubmit} />
+        )}
+        {type === "MANUALE" && (
+          <ManualeForm onSubmit={handleSubmit} />
         )}
       </DialogContent>
     </Dialog>
@@ -304,6 +327,15 @@ function EditRowDialog({ item, onClose, onUpdate, materials, articleFamilies, la
             initial={item}
             submitLabel="Salva modifiche"
             submitTestId="button-save-giornate-row"
+            onSubmit={handleSubmit}
+          />
+        )}
+        {item?.type === "MANUALE" && (
+          <ManualeForm
+            key={item.uid}
+            initial={item}
+            submitLabel="Salva modifiche"
+            submitTestId="button-save-manuale-row"
             onSubmit={handleSubmit}
           />
         )}
@@ -919,6 +951,147 @@ function GiornateForm({
   );
 }
 
+function ManualeForm({
+  onSubmit,
+  initial,
+  submitLabel = "Aggiungi",
+  submitTestId = "button-add-manuale-row",
+}: {
+  onSubmit: (d: QuoteItemDraftValues) => void;
+  initial?: QuoteItemDraft;
+  submitLabel?: string;
+  submitTestId?: string;
+}) {
+  const form = useForm<z.infer<typeof manualeFormSchema>>({
+    resolver: zodResolver(manualeFormSchema),
+    defaultValues: {
+      description: initial?.description ?? "",
+      unitOfMeasure: initial?.unitOfMeasure ?? "",
+      quantity: initial?.quantity ?? "",
+      unitCost: initial?.unitCost ?? "",
+      marginPercent: initial?.marginPercent ?? "",
+    },
+  });
+
+  const quantity = form.watch("quantity");
+  const unitCost = form.watch("unitCost");
+  const marginPercent = form.watch("marginPercent");
+
+  const preview = useMemo(() => {
+    const qty = parseFloat(quantity || "0");
+    const cost = parseFloat(unitCost || "0");
+    const margin = parseFloat(marginPercent || "0");
+    if (!isFinite(qty) || qty <= 0 || !isFinite(cost) || cost < 0) return null;
+    const m = isFinite(margin) ? margin : 0;
+    const unitPriceApplied = cost * (1 + m / 100);
+    const total = qty * unitPriceApplied;
+    return { unitPriceApplied, total, margin: m };
+  }, [quantity, unitCost, marginPercent]);
+
+  const submit = form.handleSubmit((vals) => {
+    onSubmit({
+      type: "MANUALE",
+      description: vals.description,
+      unitOfMeasure: vals.unitOfMeasure,
+      quantity: vals.quantity,
+      unitCost: vals.unitCost,
+      marginPercent: vals.marginPercent || undefined,
+      totalRow: preview ? preview.total.toFixed(2) : null,
+    });
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={submit} className="space-y-3">
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Descrizione</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="Es. Nolo ponteggio extra, Fornitura speciale…" data-testid="input-description-manuale" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <FormField
+            control={form.control}
+            name="unitOfMeasure"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Unità di misura</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Es. pz, ml, gg, ore…" data-testid="input-unit-of-measure-manuale" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="quantity"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Quantità</FormLabel>
+                <FormControl>
+                  <Input type="number" step="any" {...field} data-testid="input-quantity-manuale" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField
+            control={form.control}
+            name="unitCost"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Costo unitario (€)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="any" {...field} data-testid="input-unit-cost-manuale" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="marginPercent"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Margine %</FormLabel>
+                <FormControl>
+                  <Input type="number" step="any" placeholder="0" {...field} data-testid="input-margin-manuale" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        {preview && (
+          <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1" data-testid="preview-manuale">
+            <div>Prezzo unitario: <span className="font-medium">€ {formatEur(preview.unitPriceApplied)}</span></div>
+            <div>Margine: <span className="font-medium">{preview.margin.toFixed(2)}%</span></div>
+            <div className="pt-1 border-t">
+              Prezzo totale riga: <span className="font-semibold">€ {formatEur(preview.total)}</span>
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button type="submit" data-testid={submitTestId}>
+            {initial ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+            {submitLabel}
+          </Button>
+        </DialogFooter>
+      </form>
+    </Form>
+  );
+}
+
 // ==================== Main editor ====================
 
 export default function QuoteEditorPage() {
@@ -983,6 +1156,7 @@ export default function QuoteEditorPage() {
           developmentMm: i.developmentMm || undefined,
           catalogArticleId: i.catalogArticleId || undefined,
           laborRateId: i.laborRateId || undefined,
+          unitCost: i.type === "MANUALE" ? (i.unitCost || "0") : undefined,
           quantity: i.quantity,
           marginPercent: i.marginPercent || undefined,
           unitOfMeasure: i.unitOfMeasure,
@@ -1031,6 +1205,16 @@ export default function QuoteEditorPage() {
             quantity: it.quantity,
             marginPercent: margin,
             catalogArticleId: it.catalogArticleId ?? "",
+          };
+        }
+        if (it.type === "MANUALE") {
+          return {
+            type: "MANUALE",
+            description: it.description,
+            unitOfMeasure: it.unitOfMeasure ?? "",
+            quantity: it.quantity,
+            unitCost: it.unitCost ?? "0",
+            marginPercent: margin,
           };
         }
         return {
@@ -1115,6 +1299,7 @@ export default function QuoteEditorPage() {
       LATTONERIA: { label: "Lattoneria", cls: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" },
       ARTICOLO: { label: "Articolo", cls: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" },
       GIORNATE: { label: "Manodopera", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100" },
+      MANUALE: { label: "Manuale", cls: "bg-violet-100 text-violet-900 dark:bg-violet-900/40 dark:text-violet-100" },
     };
     const v = map[type];
     return <Badge className={v.cls} variant="secondary" data-testid={`badge-row-type-${type}`}>{v.label}</Badge>;
@@ -1138,6 +1323,9 @@ export default function QuoteEditorPage() {
         if (v) return `${fam.name} – ${v.name}`;
       }
       return it.description || "Articolo";
+    }
+    if (it.type === "MANUALE") {
+      return it.description || "Voce manuale";
     }
     const l = laborRatesQuery.data?.find((x) => x.id === it.laborRateId);
     return it.description || l?.name || "Manodopera";
@@ -1191,6 +1379,9 @@ export default function QuoteEditorPage() {
       }
       const desc = it.description || variantName || "Articolo";
       return `${desc} — ${fmtQty(it.quantity)} ${it.unitOfMeasure || "pz"}`;
+    }
+    if (it.type === "MANUALE") {
+      return `${it.description || "Voce manuale"} — ${it.quantity} ${it.unitOfMeasure || "pz"}`;
     }
     const l = laborRatesQuery.data?.find((x) => x.id === it.laborRateId);
     const desc = it.description || l?.name || "Manodopera";
