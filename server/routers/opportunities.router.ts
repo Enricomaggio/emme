@@ -217,13 +217,7 @@ opportunitiesRouter.get("/opportunities/:id", isAuthenticated, async (req, res) 
         : `${lead.firstName || ""} ${lead.lastName || ""}`.trim())
       : null;
 
-    const allProjects = await storage.getProjectsByCompany(userCompany.companyId);
-    const linkedProjects = allProjects.filter(p => p.opportunityId === opportunity.id);
-    const projectNotes = linkedProjects
-      .filter(p => p.notes)
-      .map(p => ({ projectId: p.id, clientName: p.clientName, notes: p.notes }));
-
-    res.json({ ...opportunity, leadNotes, leadName, projectNotes });
+    res.json({ ...opportunity, leadNotes, leadName });
   } catch (error) {
     console.error("Error fetching opportunity:", error);
     res.status(500).json({ message: "Errore nel recupero dell'opportunità" });

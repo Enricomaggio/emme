@@ -379,32 +379,6 @@ leadsRouter.get("/leads", isAuthenticated, async (req, res) => {
   }
 });
 
-leadsRouter.get("/leads/:id", isAuthenticated, async (req, res) => {
-  try {
-    const { id: userId, role } = req.user!;
-
-    if (!canAccessLeads(role)) {
-      return res.status(403).json({ message: "Accesso negato: i tecnici non possono visualizzare i lead" });
-    }
-
-    const ctx = await buildAccessContext(userId, role, req);
-    if (!ctx) {
-      return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
-    }
-
-    const lead = await storage.getLeadWithAccess(req.params.id, ctx);
-
-    if (!lead) {
-      return res.status(404).json({ message: "Lead non trovato" });
-    }
-
-    res.json(lead);
-  } catch (error) {
-    console.error("Error fetching lead:", error);
-    res.status(500).json({ message: "Errore nel recupero del lead" });
-  }
-});
-
 leadsRouter.post("/leads", isAuthenticated, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
