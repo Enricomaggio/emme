@@ -676,7 +676,7 @@ export const quoteItems = pgTable("quote_items", {
   // Snapshot calcoli congelati al salvataggio
   weightKg: numeric("weight_kg"),
   unitCost: numeric("unit_cost"),
-  marginPercent: numeric("margin_percent", { precision: 6, scale: 2 }),
+  marginPercent: numeric("margin_percent"),
 
   // Campi legacy ponteggi
   phase: text("phase").$type<QuotePhase>(),
