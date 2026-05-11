@@ -72,7 +72,15 @@ export function QuotePdfActions({ quote, opportunity, resolveItemName, disabled 
     };
   }, [quote, resolveItemName]);
 
-  const dataReady = !!companyQuery.data;
+  const resolvedCompany = useMemo(() => {
+    if (!companyQuery.data) return null;
+    return {
+      ...companyQuery.data,
+      logoUrl: companyQuery.data.logoUrl || `${window.location.origin}/gdm-logo.png`,
+    };
+  }, [companyQuery.data]);
+
+  const dataReady = !!resolvedCompany;
   const customerMissing = !!leadId && !leadQuery.isLoading && !leadQuery.data;
   const opportunityMissing = !opportunity;
 
@@ -90,12 +98,12 @@ export function QuotePdfActions({ quote, opportunity, resolveItemName, disabled 
   }
 
   async function generateBlob(): Promise<Blob> {
-    if (!companyQuery.data) {
+    if (!resolvedCompany) {
       throw new Error("Dati azienda non disponibili");
     }
     return await pdf(
       <QuotePdfDocument
-        company={companyQuery.data}
+        company={resolvedCompany}
         customer={leadQuery.data ?? null}
         quote={enrichedQuote}
         opportunityTitle={opportunity?.title}
@@ -129,7 +137,7 @@ export function QuotePdfActions({ quote, opportunity, resolveItemName, disabled 
   }
 
   function openMailto() {
-    const company = companyQuery.data;
+    const company = resolvedCompany;
     const customer = leadQuery.data;
     const customerName = customerDisplayName(customer ?? null);
     const persistedTotal = parseFloat(quote.totalAmount || "0");
@@ -264,7 +272,7 @@ export function QuotePdfActions({ quote, opportunity, resolveItemName, disabled 
             {dataReady ? (
               <PDFViewer style={{ width: "100%", height: "100%", border: "none" }}>
                 <QuotePdfDocument
-                  company={companyQuery.data!}
+                  company={resolvedCompany!}
                   customer={leadQuery.data ?? null}
                   quote={enrichedQuote}
                   opportunityTitle={opportunity?.title}

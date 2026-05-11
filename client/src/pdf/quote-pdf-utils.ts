@@ -37,6 +37,9 @@ export interface PdfCustomer {
   email?: string | null;
   phone?: string | null;
   entityType?: string | null;
+  firstReferentName?: string | null;
+  firstReferentEmail?: string | null;
+  firstReferentPhone?: string | null;
 }
 
 export function fmt(n: number | string | null | undefined): string {

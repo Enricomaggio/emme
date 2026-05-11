@@ -628,6 +628,36 @@ leadsRouter.delete("/leads/:id", isAuthenticated, async (req, res) => {
   }
 });
 
+// ============ LEAD DETAIL ============
+
+// GET /api/leads/:id - Dettaglio singolo lead con referente principale
+leadsRouter.get("/leads/:id", isAuthenticated, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user!;
+    if (!canAccessLeads(role)) return res.status(403).json({ message: "Accesso negato" });
+    const ctx = await buildAccessContext(userId, role, req);
+    if (!ctx) return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+    const lead = await storage.getLeadWithAccess(req.params.id, ctx);
+    if (!lead) return res.status(404).json({ message: "Lead non trovato" });
+    let firstReferentName: string | null = null;
+    let firstReferentEmail: string | null = null;
+    let firstReferentPhone: string | null = null;
+    if (lead.entityType === "COMPANY") {
+      const referents = await storage.getReferentsByContactId(lead.id);
+      const firstRef = referents.length > 0 ? referents[0] : null;
+      if (firstRef) {
+        firstReferentName = `${firstRef.firstName} ${firstRef.lastName}`.trim();
+        firstReferentEmail = firstRef.email ?? null;
+        firstReferentPhone = firstRef.phone ?? null;
+      }
+    }
+    res.json({ ...lead, firstReferentName, firstReferentEmail, firstReferentPhone });
+  } catch (error) {
+    console.error("Error fetching lead:", error);
+    res.status(500).json({ message: "Errore nel recupero del lead" });
+  }
+});
+
 // ============ LEAD SUB-RESOURCES ============
 
 // GET /api/leads/:id/opportunities - Lista opportunità di un lead specifico (con controllo accesso)

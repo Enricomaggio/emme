@@ -293,6 +293,15 @@ export const QuotePdfDocument = ({ company, customer, quote, opportunityTitle }:
                   {[customer.email, customer.phone].filter(Boolean).join(" · ")}
                 </Text>
               )}
+              {customer.firstReferentName && (
+                <Text style={[styles.cardLine, { marginTop: 4 }]}>
+                  Rif.: {[
+                    customer.firstReferentName,
+                    customer.firstReferentEmail,
+                    customer.firstReferentPhone,
+                  ].filter(Boolean).join(" · ")}
+                </Text>
+              )}
             </>
           ) : (
             <Text style={styles.cardLine}>Cliente non specificato</Text>
