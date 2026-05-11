@@ -668,10 +668,10 @@ export const quoteItems = pgTable("quote_items", {
   unitOfMeasure: text("unit_of_measure"),
 
   // Per righe LATTONERIA: sviluppo in mm
-  developmentMm: numeric("development_mm", { precision: 12, scale: 3 }),
+  developmentMm: numeric("development_mm"),
 
   // Quantità: metri lineari (LATTONERIA), unità (ARTICOLO), giorni (GIORNATE)
-  quantity: numeric("quantity", { precision: 12, scale: 4 }).notNull().default("0"),
+  quantity: numeric("quantity").notNull().default("0"),
 
   // Snapshot calcoli congelati al salvataggio
   weightKg: numeric("weight_kg", { precision: 12, scale: 4 }),
