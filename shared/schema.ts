@@ -674,8 +674,8 @@ export const quoteItems = pgTable("quote_items", {
   quantity: numeric("quantity").notNull().default("0"),
 
   // Snapshot calcoli congelati al salvataggio
-  weightKg: numeric("weight_kg", { precision: 12, scale: 4 }),
-  unitCost: numeric("unit_cost", { precision: 12, scale: 4 }),
+  weightKg: numeric("weight_kg"),
+  unitCost: numeric("unit_cost"),
   marginPercent: numeric("margin_percent", { precision: 6, scale: 2 }),
 
   // Campi legacy ponteggi
