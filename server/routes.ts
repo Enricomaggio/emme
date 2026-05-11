@@ -14,6 +14,7 @@ import { articlesRouter } from "./routers/articles.router";
 import { assignmentsRouter } from "./routers/assignments.router";
 import { notificationsRouter } from "./routers/notifications.router";
 import { quotesRouter } from "./routers/quotes.router";
+import { paymentMethodsRouter } from "./routers/payment-methods.router";
 import {
   isAuthenticated,
   canAccessLeads,
@@ -40,6 +41,7 @@ export async function registerRoutes(
   app.use('/api', assignmentsRouter);
   app.use('/api', notificationsRouter);
   app.use('/api', quotesRouter);
+  app.use('/api', paymentMethodsRouter);
 
 
 
