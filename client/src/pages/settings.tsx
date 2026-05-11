@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { useState, useEffect, useRef } from "react";
 import type { Company, User as UserType, BillingProfile, Article } from "@shared/schema";
+import { applyTemplate } from "@/pdf/quote-pdf-utils";
 
 const emptyProfileForm = {
   companyName: "",
@@ -1125,6 +1126,17 @@ export default function SettingsPage() {
     setCompanyForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  const [emailPreviewVars, setEmailPreviewVars] = useState({
+    numero: "PRV-2026-0001",
+    cliente: "Mario Rossi",
+    oggetto: "Rifacimento copertura villetta",
+    totale: "€ 12.450,00",
+  });
+
+  function handlePreviewVarChange(field: keyof typeof emailPreviewVars, value: string) {
+    setEmailPreviewVars((prev) => ({ ...prev, [field]: value }));
+  }
+
   // Profile image upload
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -1734,30 +1746,107 @@ export default function SettingsPage() {
                     Placeholder disponibili: <code>{`{numero}`}</code>, <code>{`{cliente}`}</code>,{" "}
                     <code>{`{oggetto}`}</code>, <code>{`{totale}`}</code>
                   </p>
-                  <div className="space-y-2">
-                    <Label htmlFor="company-email-subject">Oggetto email</Label>
-                    <Input
-                      id="company-email-subject"
-                      data-testid="input-company-email-subject"
-                      value={companyForm.emailSubjectTemplate}
-                      onChange={(e) =>
-                        handleCompanyChange("emailSubjectTemplate", e.target.value)
-                      }
-                      placeholder="Preventivo {numero} — GDM Lattonerie"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="company-email-body">Corpo email</Label>
-                    <Textarea
-                      id="company-email-body"
-                      data-testid="input-company-email-body"
-                      value={companyForm.emailBodyTemplate}
-                      onChange={(e) =>
-                        handleCompanyChange("emailBodyTemplate", e.target.value)
-                      }
-                      rows={6}
-                      placeholder={"Buongiorno,\n\nin allegato trovate il preventivo {numero}..."}
-                    />
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="company-email-subject">Oggetto email</Label>
+                        <Input
+                          id="company-email-subject"
+                          data-testid="input-company-email-subject"
+                          value={companyForm.emailSubjectTemplate}
+                          onChange={(e) =>
+                            handleCompanyChange("emailSubjectTemplate", e.target.value)
+                          }
+                          placeholder="Preventivo {numero} — GDM Lattonerie"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="company-email-body">Corpo email</Label>
+                        <Textarea
+                          id="company-email-body"
+                          data-testid="input-company-email-body"
+                          value={companyForm.emailBodyTemplate}
+                          onChange={(e) =>
+                            handleCompanyChange("emailBodyTemplate", e.target.value)
+                          }
+                          rows={10}
+                          placeholder={"Buongiorno,\n\nin allegato trovate il preventivo {numero}..."}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Valori di esempio
+                        </Label>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label htmlFor="preview-var-numero" className="text-xs">{`{numero}`}</Label>
+                            <Input
+                              id="preview-var-numero"
+                              data-testid="input-preview-var-numero"
+                              value={emailPreviewVars.numero}
+                              onChange={(e) => handlePreviewVarChange("numero", e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="preview-var-cliente" className="text-xs">{`{cliente}`}</Label>
+                            <Input
+                              id="preview-var-cliente"
+                              data-testid="input-preview-var-cliente"
+                              value={emailPreviewVars.cliente}
+                              onChange={(e) => handlePreviewVarChange("cliente", e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="preview-var-oggetto" className="text-xs">{`{oggetto}`}</Label>
+                            <Input
+                              id="preview-var-oggetto"
+                              data-testid="input-preview-var-oggetto"
+                              value={emailPreviewVars.oggetto}
+                              onChange={(e) => handlePreviewVarChange("oggetto", e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="preview-var-totale" className="text-xs">{`{totale}`}</Label>
+                            <Input
+                              id="preview-var-totale"
+                              data-testid="input-preview-var-totale"
+                              value={emailPreviewVars.totale}
+                              onChange={(e) => handlePreviewVarChange("totale", e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                        <div>
+                          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Anteprima oggetto
+                          </Label>
+                          <p
+                            className="text-sm font-medium mt-1 break-words"
+                            data-testid="text-email-preview-subject"
+                          >
+                            {applyTemplate(companyForm.emailSubjectTemplate, emailPreviewVars) || (
+                              <span className="text-muted-foreground italic">(vuoto)</span>
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Anteprima corpo
+                          </Label>
+                          <pre
+                            className="text-sm mt-1 whitespace-pre-wrap break-words font-sans"
+                            data-testid="text-email-preview-body"
+                          >
+                            {applyTemplate(companyForm.emailBodyTemplate, emailPreviewVars) || (
+                              <span className="text-muted-foreground italic">(vuoto)</span>
+                            )}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
