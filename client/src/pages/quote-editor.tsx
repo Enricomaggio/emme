@@ -1168,6 +1168,12 @@ export default function QuoteEditorPage() {
     };
   }
 
+  function fmtQty(value: string | number | null | undefined): string {
+    const n = typeof value === "string" ? parseFloat(value) : (value ?? 0);
+    if (!isFinite(n)) return "?";
+    return n.toLocaleString("it-IT", { maximumFractionDigits: 4 });
+  }
+
   function rowDetails(it: QuoteItemDraft): string {
     if (it.type === "LATTONERIA") {
       const m = materialsQuery.data?.find((x) => x.id === it.materialId);
@@ -1175,7 +1181,7 @@ export default function QuoteEditorPage() {
       const f = it.materialFinishId ? t?.finishes?.find((x) => x.id === it.materialFinishId) : undefined;
       const desc = it.description ||
         (m && t ? `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}` : "Lattoneria");
-      return `${desc} — sviluppo ${it.developmentMm || "?"}cm × ${it.quantity} ml`;
+      return `${desc} — sviluppo ${it.developmentMm ? fmtQty(it.developmentMm) : "?"}cm × ${fmtQty(it.quantity)} ml`;
     }
     if (it.type === "ARTICOLO") {
       let variantName: string | undefined;
@@ -1184,11 +1190,11 @@ export default function QuoteEditorPage() {
         if (v) { variantName = `${fam.name} – ${v.name}`; break; }
       }
       const desc = it.description || variantName || "Articolo";
-      return `${desc} — ${it.quantity} ${it.unitOfMeasure || "pz"}`;
+      return `${desc} — ${fmtQty(it.quantity)} ${it.unitOfMeasure || "pz"}`;
     }
     const l = laborRatesQuery.data?.find((x) => x.id === it.laborRateId);
     const desc = it.description || l?.name || "Manodopera";
-    return `${desc} — ${it.quantity} gg`;
+    return `${desc} — ${fmtQty(it.quantity)} gg`;
   }
 
   return (

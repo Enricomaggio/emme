@@ -72,12 +72,18 @@ export function customerAddressLine(c: PdfCustomer | null | undefined): string {
   return parts.join(", ");
 }
 
+function fmtMeasure(n: number | string | null | undefined): string {
+  const v = typeof n === "string" ? parseFloat(n) : n ?? 0;
+  if (!isFinite(v as number)) return "0";
+  return (v as number).toLocaleString("it-IT", { maximumFractionDigits: 4 });
+}
+
 export function buildItemDescription(it: PdfQuoteItem): string {
   const base = it.resolvedName || it.description || "";
   if (it.type === "LATTONERIA" && it.developmentMm) {
     const dev = parseFloat(it.developmentMm);
     if (isFinite(dev) && dev > 0) {
-      return `${base}${base ? " — " : ""}sviluppo ${fmt(dev)} mm`;
+      return `${base}${base ? " — " : ""}sviluppo ${fmtMeasure(dev)} mm`;
     }
   }
   return base || "—";
@@ -86,7 +92,7 @@ export function buildItemDescription(it: PdfQuoteItem): string {
 export function formatQty(it: PdfQuoteItem): string {
   const q = parseFloat(it.quantity) || 0;
   const unit = it.unitOfMeasure || (it.type === "LATTONERIA" ? "ml" : it.type === "GIORNATE" ? "gg" : "pz");
-  return `${q.toLocaleString("it-IT", { maximumFractionDigits: 3 })} ${unit}`;
+  return `${q.toLocaleString("it-IT", { maximumFractionDigits: 4 })} ${unit}`;
 }
 
 export function computeTotals(quote: PdfQuote, vatPercent = 22) {
