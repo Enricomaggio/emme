@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     marginBottom: 2,
   },
-  cardLine: { lineHeight: 1.4 },
+  cardLine: { marginBottom: 1 },
   itemsTable: {
     marginTop: 4,
     marginBottom: 10,
@@ -297,7 +297,7 @@ export const QuotePdfDocument = ({ company, customer, quote, opportunityTitle, p
                 </Text>
               )}
               {customer.firstReferentName && (
-                <Text style={styles.cardLine}>
+                <Text style={[styles.cardLine, { marginTop: 5 }]}>
                   Rif.: {[
                     customer.firstReferentName,
                     customer.firstReferentEmail,
