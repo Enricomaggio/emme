@@ -276,11 +276,11 @@ export default function LeadDuplicatesPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setLocation("/leads")}
+            onClick={() => window.history.back()}
             data-testid="button-back-to-leads"
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
-            Torna ai Contatti
+            Torna indietro
           </Button>
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Duplicati</h1>

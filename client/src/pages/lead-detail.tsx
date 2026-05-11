@@ -918,7 +918,7 @@ export default function LeadDetailPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate("/leads")}
+              onClick={() => window.history.back()}
               data-testid="button-back"
             >
               <ArrowLeft className="w-4 h-4" />

@@ -176,7 +176,7 @@ export default function ImportLeadsPage() {
     <DashboardLayout user={user!}>
       <div className="space-y-6">
         <div className="flex items-center gap-4 flex-wrap">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/leads")} data-testid="button-back-leads">
+          <Button variant="ghost" size="icon" onClick={() => window.history.back()} data-testid="button-back-leads">
             <ArrowLeft />
           </Button>
           <div>

@@ -1194,7 +1194,7 @@ export default function QuoteEditorPage() {
   return (
     <div className="container mx-auto px-4 py-6 max-w-5xl space-y-4" data-testid="page-quote-editor">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/opportunities")} data-testid="button-back">
+        <Button variant="ghost" size="icon" onClick={() => window.history.back()} data-testid="button-back">
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div className="flex-1">
