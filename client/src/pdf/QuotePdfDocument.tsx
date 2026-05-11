@@ -280,22 +280,24 @@ export const QuotePdfDocument = ({ company, customer, quote, opportunityTitle, p
           <Text style={styles.customerName}>{customerDisplayName(customer) || customerInitial}</Text>
           {customer ? (
             <>
-              <Text style={styles.cardLine}>{customerAddressLine(customer)}</Text>
-              <Text style={styles.cardLine}>
-                {[
-                  customer.vatNumber ? `P.IVA ${customer.vatNumber}` : null,
-                  customer.fiscalCode ? `CF ${customer.fiscalCode}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Text>
+              {!!customerAddressLine(customer) && (
+                <Text style={styles.cardLine}>{customerAddressLine(customer)}</Text>
+              )}
+              {(customer.vatNumber || customer.fiscalCode) && (
+                <Text style={styles.cardLine}>
+                  {[
+                    customer.vatNumber ? `P.IVA ${customer.vatNumber}` : null,
+                    customer.fiscalCode ? `CF ${customer.fiscalCode}` : null,
+                  ].filter(Boolean).join(" · ")}
+                </Text>
+              )}
               {(customer.email || customer.phone) && (
                 <Text style={styles.cardLine}>
                   {[customer.email, customer.phone].filter(Boolean).join(" · ")}
                 </Text>
               )}
               {customer.firstReferentName && (
-                <Text style={[styles.cardLine, { marginTop: 4 }]}>
+                <Text style={styles.cardLine}>
                   Rif.: {[
                     customer.firstReferentName,
                     customer.firstReferentEmail,
