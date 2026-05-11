@@ -426,7 +426,7 @@ export const opportunities = pgTable("opportunities", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description"),
-  value: numeric("value", { precision: 12, scale: 2 }),
+  value: numeric("value"),
   stageId: varchar("stage_id").references(() => pipelineStages.id),
   leadId: varchar("lead_id").notNull().references(() => leads.id),
   referentId: varchar("referent_id").references(() => contactReferents.id),
@@ -446,8 +446,8 @@ export const opportunities = pgTable("opportunities", {
   veniceZone: text("venice_zone"),
   
   // Coordinate GPS per mappa cantieri
-  siteLatitude: numeric("site_latitude", { precision: 10, scale: 7 }),
-  siteLongitude: numeric("site_longitude", { precision: 10, scale: 7 }),
+  siteLatitude: numeric("site_latitude"),
+  siteLongitude: numeric("site_longitude"),
   
   // Motivazione persa
   lostReason: text("lost_reason").$type<LostReason>(),
@@ -592,10 +592,10 @@ export const articles = pgTable("articles", {
   category: text("category").$type<ArticleCategory>().notNull().default("SCAFFOLDING"), // Categoria articolo
   unitType: text("unit_type").$type<UnitType>().notNull().default("MQ"),
   pricingLogic: text("pricing_logic").$type<PricingLogicLegacy>().notNull().default("RENTAL"),
-  basePrice: numeric("base_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  basePrice: numeric("base_price").notNull().default("0"),
   pricingData: jsonb("pricing_data").$type<PricingData>(), // Dati strutturati per pricing complesso
   installationData: jsonb("installation_data").$type<InstallationData>(), // Opzioni installazione per RENTAL
-  warehouseCostPerUnit: numeric("warehouse_cost_per_unit", { precision: 12, scale: 4 }), // Costo magazzino per unità (€/mq, €/ml, €/cad)
+  warehouseCostPerUnit: numeric("warehouse_cost_per_unit"), // Costo magazzino per unità (€/mq, €/ml, €/cad)
   variantsData: jsonb("variants_data").$type<ArticleVariantsData>(), // Varianti/modelli articolo (es. diversi montacarichi)
   trasfertaData: jsonb("trasferta_data").$type<TrasfertaData>(), // Dati trasferta per categoria TRASFERTA
   hoistInstallationData: jsonb("hoist_installation_data").$type<HoistInstallationData>(), // Dati manodopera per montacarichi (HOIST)
@@ -627,7 +627,7 @@ export const quotes = pgTable("quotes", {
   companyId: varchar("company_id").notNull().references(() => companies.id),
   number: text("number").notNull(), // Es. "PREV-2024-001"
   status: text("status").$type<QuoteStatus>().notNull().default("DRAFT"),
-  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalAmount: numeric("total_amount").notNull().default("0"),
   // Oggetto/descrizione e note libere del preventivo (Catalogo Lattoneria)
   subject: text("subject"),
   notes: text("notes"),
@@ -684,8 +684,8 @@ export const quoteItems = pgTable("quote_items", {
   vatRate: text("vat_rate").$type<VatRate>(),
 
   // Prezzo finale (totalRow = totale riga, unitPriceApplied = prezzo unitario applicato)
-  unitPriceApplied: numeric("unit_price_applied", { precision: 12, scale: 2 }).notNull().default("0"),
-  totalRow: numeric("total_row", { precision: 12, scale: 2 }).notNull().default("0"),
+  unitPriceApplied: numeric("unit_price_applied").notNull().default("0"),
+  totalRow: numeric("total_row").notNull().default("0"),
 
   // Ordinamento riga nel preventivo
   displayOrder: integer("display_order").notNull().default(0),
@@ -1081,7 +1081,7 @@ export const warehouseBalances = pgTable("warehouse_balances", {
   companyId: varchar("company_id").notNull().references(() => companies.id),
   warehouseType: text("warehouse_type").$type<"VILLA" | "PL" | "EP">().notNull(),
   date: timestamp("date"),
-  value: numeric("value", { precision: 12, scale: 2 }).notNull().default("0"),
+  value: numeric("value").notNull().default("0"),
 }, (table) => [
   index("warehouse_balances_company_id_idx").on(table.companyId),
 ]);
@@ -1441,8 +1441,8 @@ export const salesTargets = pgTable("sales_targets", {
   userId: varchar("user_id").notNull().references(() => users.id),
   month: integer("month").notNull(), // 1-12
   year: integer("year").notNull(),
-  quoteTarget: numeric("quote_target", { precision: 12, scale: 2 }).notNull().default("0"),
-  wonTarget: numeric("won_target", { precision: 12, scale: 2 }).notNull().default("0"),
+  quoteTarget: numeric("quote_target").notNull().default("0"),
+  wonTarget: numeric("won_target").notNull().default("0"),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   unique("sales_targets_unique").on(table.companyId, table.userId, table.month, table.year),
@@ -1485,11 +1485,11 @@ export const salVoci = pgTable("sal_voci", {
   salPeriodId: varchar("sal_period_id").notNull().references(() => salPeriods.id, { onDelete: "cascade" }),
   companyId: varchar("company_id").notNull().references(() => companies.id),
   description: text("description").notNull(),
-  quantity: numeric("quantity", { precision: 12, scale: 4 }).notNull().default("1"),
+  quantity: numeric("quantity").notNull().default("1"),
   um: text("um").notNull().default("cad"),
-  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
-  discountPercent: numeric("discount_percent", { precision: 5, scale: 2 }).notNull().default("0"),
-  total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  unitPrice: numeric("unit_price").notNull().default("0"),
+  discountPercent: numeric("discount_percent").notNull().default("0"),
+  total: numeric("total").notNull().default("0"),
   vatRate: text("vat_rate").$type<VatRate>().notNull().default("22"),
   phase: text("phase").notNull().default("NOLEGGIO"),
   sourceQuoteItemId: varchar("source_quote_item_id"),
@@ -1518,11 +1518,11 @@ export const materials = pgTable("materials", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   // Peso specifico in kg/m³
-  density: numeric("density", { precision: 12, scale: 4 }).notNull().default("0"),
+  density: numeric("density").notNull().default("0"),
   // 'SINGLE' = prezzo unico per tutti gli spessori, 'PER_VARIANT' = ogni variante ha il suo prezzo
   priceMode: text("price_mode").notNull().default("SINGLE"),
-  singleCostPerKg: numeric("single_cost_per_kg", { precision: 12, scale: 4 }).default("0"),
-  singleMarginPercent: numeric("single_margin_percent", { precision: 6, scale: 2 }).default("0"),
+  singleCostPerKg: numeric("single_cost_per_kg").default("0"),
+  singleMarginPercent: numeric("single_margin_percent").default("0"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1531,13 +1531,13 @@ export const materialThicknesses = pgTable("material_thicknesses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   materialId: varchar("material_id").notNull().references(() => materials.id, { onDelete: "cascade" }),
   // Spessore in millimetri
-  thicknessMm: numeric("thickness_mm", { precision: 8, scale: 3 }).notNull(),
+  thicknessMm: numeric("thickness_mm").notNull(),
   // Finitura opzionale (es. "Grezzo", "Preverniciato", "RAL 9010")
   finish: text("finish"),
   // Costo al kg in € — usato solo in modalità PER_VARIANT
-  costPerKg: numeric("cost_per_kg", { precision: 12, scale: 4 }).default("0"),
+  costPerKg: numeric("cost_per_kg").default("0"),
   // Margine % di default — usato solo in modalità PER_VARIANT
-  marginPercent: numeric("margin_percent", { precision: 6, scale: 2 }).default("0"),
+  marginPercent: numeric("margin_percent").default("0"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -1559,8 +1559,8 @@ export const catalogArticles = pgTable("catalog_articles", {
   familyId: varchar("family_id").references(() => articleFamilies.id, { onDelete: "cascade" }),
   // name diventa l'etichetta variante (es. "Diam. 60")
   name: text("name").notNull(),
-  unitCost: numeric("unit_cost", { precision: 12, scale: 4 }).notNull().default("0"),
-  marginPercent: numeric("margin_percent", { precision: 6, scale: 2 }).notNull().default("0"),
+  unitCost: numeric("unit_cost").notNull().default("0"),
+  marginPercent: numeric("margin_percent").notNull().default("0"),
   unitOfMeasure: text("unit_of_measure").notNull().default("pz"),
   // Note aggiuntive (es. "spessore 0.8mm")
   notes: text("notes"),
@@ -1572,8 +1572,8 @@ export const laborRates = pgTable("labor_rates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   // Costo al giorno in €
-  costPerDay: numeric("cost_per_day", { precision: 12, scale: 2 }).notNull().default("0"),
-  marginPercent: numeric("margin_percent", { precision: 6, scale: 2 }).notNull().default("0"),
+  costPerDay: numeric("cost_per_day").notNull().default("0"),
+  marginPercent: numeric("margin_percent").notNull().default("0"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
