@@ -389,7 +389,7 @@ function LattoneriaForm({
       ? parseFloat(marginOverride)
       : defaultMargin;
     if (!isFinite(dev) || !isFinite(meters) || meters <= 0 || dev <= 0) return null;
-    const weightKg = (dev / 1000) * meters * (thickMm / 1000) * density;
+    const weightKg = (dev / 100) * meters * (thickMm / 1000) * density;
     const cost = weightKg * costKg;
     const total = cost * (1 + (isFinite(margin) ? margin : 0) / 100);
     return { weightKg, cost, total, margin: isFinite(margin) ? margin : 0 };
@@ -505,7 +505,7 @@ function LattoneriaForm({
             name="developmentMm"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Sviluppo (mm)</FormLabel>
+                <FormLabel>Sviluppo (cm)</FormLabel>
                 <FormControl>
                   <Input type="number" step="any" {...field} data-testid="input-development-mm" />
                 </FormControl>
@@ -1125,7 +1125,7 @@ export default function QuoteEditorPage() {
       const f = it.materialFinishId ? t?.finishes?.find((x) => x.id === it.materialFinishId) : undefined;
       const desc = it.description ||
         (m && t ? `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}` : "Lattoneria");
-      return `${desc} — sviluppo ${it.developmentMm || "?"}mm × ${it.quantity} ml`;
+      return `${desc} — sviluppo ${it.developmentMm || "?"}cm × ${it.quantity} ml`;
     }
     if (it.type === "ARTICOLO") {
       let variantName: string | undefined;
