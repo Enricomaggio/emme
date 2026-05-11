@@ -1,7 +1,7 @@
 import { 
   companies, leads, userCompanies, users, pipelineStages, opportunities, activityLogs, invites, contactReferents, articles, quotes, quoteItems, projectStages, projects, projectTasks,
   workers, teams, drivers, vehicles, dailyAssignments, teamMembers, paymentMethods, leadSources, reminders, billingProfiles, notifications, notificationPreferences, clauseOverrides, salesTargets, externalEngineers, warehouseBalances,
-  materials, materialThicknesses, catalogArticles, laborRates,
+  materials, materialThicknesses, articleFamilies, catalogArticles, laborRates,
   type Company, type InsertCompany,
   type Lead, type InsertLead,
   type UserCompany, type InsertUserCompany,
@@ -34,6 +34,7 @@ import {
   type WarehouseBalance, type InsertWarehouseBalance,
   type Material, type InsertMaterial, type MaterialWithThicknesses,
   type MaterialThickness, type InsertMaterialThickness,
+  type ArticleFamily, type InsertArticleFamily, type ArticleFamilyWithVariants,
   type CatalogArticle, type InsertCatalogArticle,
   type LaborRate, type InsertLaborRate,
   type UserRole, type UserStatus, type User,
@@ -53,6 +54,15 @@ export interface AccessContext {
 // Tipo per company con conteggio utenti
 export interface CompanyWithUserCount extends Company {
   userCount: number;
+}
+
+// Parametri per aggiornamento prezzi massivo
+export interface BulkUpdateParams {
+  target: "ALL" | "MATERIALS" | "ARTICLES" | "MATERIAL" | "ARTICLE_FAMILY";
+  targetId?: string;
+  operation: "INCREASE_COST_PCT" | "DECREASE_COST_PCT" | "SET_MARGIN_PCT" | "INCREASE_MARGIN_PCT";
+  value: number;
+  preview?: boolean;
 }
 
 // Interfaccia per tutte le operazioni CRUD multi-tenant
@@ -148,12 +158,22 @@ export interface IStorage {
   updateMaterialThickness(id: string, data: Partial<InsertMaterialThickness>): Promise<MaterialThickness | undefined>;
   deleteMaterialThickness(id: string): Promise<boolean>;
 
-  // Catalogo Lattoneria — Articoli pre-acquistati e rivenduti
+  // Catalogo Lattoneria — Famiglie articoli
+  getArticleFamilies(): Promise<ArticleFamilyWithVariants[]>;
+  getArticleFamily(id: string): Promise<ArticleFamily | undefined>;
+  createArticleFamily(data: InsertArticleFamily): Promise<ArticleFamily>;
+  updateArticleFamily(id: string, data: Partial<InsertArticleFamily>): Promise<ArticleFamily | undefined>;
+  deleteArticleFamily(id: string): Promise<boolean>;
+
+  // Catalogo Lattoneria — Articoli pre-acquistati e rivenduti (varianti di famiglie)
   getCatalogArticles(): Promise<CatalogArticle[]>;
   getCatalogArticle(id: string): Promise<CatalogArticle | undefined>;
   createCatalogArticle(data: InsertCatalogArticle): Promise<CatalogArticle>;
   updateCatalogArticle(id: string, data: Partial<InsertCatalogArticle>): Promise<CatalogArticle | undefined>;
   deleteCatalogArticle(id: string): Promise<boolean>;
+
+  // Catalogo Lattoneria — Aggiornamento prezzi massivo
+  bulkUpdateCatalog(params: BulkUpdateParams): Promise<number>;
 
   // Catalogo Lattoneria — Manodopera giornaliera
   getLaborRates(): Promise<LaborRate[]>;
@@ -1364,6 +1384,43 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
+  // ============ CATALOGO LATTONERIA: FAMIGLIE ARTICOLI ============
+
+  async getArticleFamilies(): Promise<ArticleFamilyWithVariants[]> {
+    return db.query.articleFamilies.findMany({
+      with: {
+        variants: {
+          orderBy: (v, { asc }) => [asc(v.name)],
+        },
+      },
+      orderBy: (f, { asc }) => [asc(f.name)],
+    }) as Promise<ArticleFamilyWithVariants[]>;
+  }
+
+  async getArticleFamily(id: string): Promise<ArticleFamily | undefined> {
+    const [f] = await db.select().from(articleFamilies).where(eq(articleFamilies.id, id));
+    return f || undefined;
+  }
+
+  async createArticleFamily(data: InsertArticleFamily): Promise<ArticleFamily> {
+    const [f] = await db.insert(articleFamilies).values(data).returning();
+    return f;
+  }
+
+  async updateArticleFamily(id: string, data: Partial<InsertArticleFamily>): Promise<ArticleFamily | undefined> {
+    const [f] = await db
+      .update(articleFamilies)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(articleFamilies.id, id))
+      .returning();
+    return f || undefined;
+  }
+
+  async deleteArticleFamily(id: string): Promise<boolean> {
+    const result = await db.delete(articleFamilies).where(eq(articleFamilies.id, id)).returning();
+    return result.length > 0;
+  }
+
   // ============ CATALOGO LATTONERIA: ARTICOLI ============
 
   async getCatalogArticles(): Promise<CatalogArticle[]> {
@@ -1392,6 +1449,168 @@ export class DatabaseStorage implements IStorage {
   async deleteCatalogArticle(id: string): Promise<boolean> {
     const result = await db.delete(catalogArticles).where(eq(catalogArticles.id, id)).returning();
     return result.length > 0;
+  }
+
+  // ============ CATALOGO LATTONERIA: AGGIORNAMENTO MASSIVO ============
+
+  async bulkUpdateCatalog(params: BulkUpdateParams): Promise<number> {
+    const { target, targetId, operation, value, preview } = params;
+    let count = 0;
+
+    if (preview) {
+      // Solo conteggio
+      if (target === "ALL" || target === "MATERIALS") {
+        const mats = await db.select().from(materials);
+        for (const m of mats) {
+          if (m.priceMode === "SINGLE") count++;
+          else {
+            const ths = await db.select().from(materialThicknesses).where(eq(materialThicknesses.materialId, m.id));
+            count += ths.length;
+          }
+        }
+      }
+      if (target === "MATERIAL" && targetId) {
+        const m = await this.getMaterial(targetId);
+        if (m) {
+          if (m.priceMode === "SINGLE") count++;
+          else {
+            const ths = await db.select().from(materialThicknesses).where(eq(materialThicknesses.materialId, targetId));
+            count += ths.length;
+          }
+        }
+      }
+      if (target === "ALL" || target === "ARTICLES") {
+        const arts = await db.select().from(catalogArticles);
+        count += arts.length;
+      }
+      if (target === "ARTICLE_FAMILY" && targetId) {
+        const variants = await db.select().from(catalogArticles).where(eq(catalogArticles.familyId, targetId));
+        count += variants.length;
+      }
+      return count;
+    }
+
+    // Applicazione effettiva
+    const factor = value / 100;
+
+    if (target === "ALL" || target === "MATERIALS" || target === "MATERIAL") {
+      const mats = target === "MATERIAL" && targetId
+        ? await db.select().from(materials).where(eq(materials.id, targetId))
+        : await db.select().from(materials);
+
+      for (const m of mats) {
+        if (m.priceMode === "SINGLE") {
+          if (operation === "INCREASE_COST_PCT") {
+            await db.update(materials).set({
+              singleCostPerKg: sql`${materials.singleCostPerKg} * ${1 + factor}`,
+              updatedAt: new Date(),
+            }).where(eq(materials.id, m.id));
+          } else if (operation === "DECREASE_COST_PCT") {
+            await db.update(materials).set({
+              singleCostPerKg: sql`${materials.singleCostPerKg} * ${1 - factor}`,
+              updatedAt: new Date(),
+            }).where(eq(materials.id, m.id));
+          } else if (operation === "SET_MARGIN_PCT") {
+            await db.update(materials).set({
+              singleMarginPercent: String(value),
+              updatedAt: new Date(),
+            }).where(eq(materials.id, m.id));
+          } else if (operation === "INCREASE_MARGIN_PCT") {
+            await db.update(materials).set({
+              singleMarginPercent: sql`${materials.singleMarginPercent} + ${value}`,
+              updatedAt: new Date(),
+            }).where(eq(materials.id, m.id));
+          }
+          count++;
+        } else {
+          // PER_VARIANT: aggiorna gli spessori
+          if (operation === "INCREASE_COST_PCT") {
+            const res = await db.update(materialThicknesses).set({
+              costPerKg: sql`${materialThicknesses.costPerKg} * ${1 + factor}`,
+              updatedAt: new Date(),
+            }).where(eq(materialThicknesses.materialId, m.id)).returning();
+            count += res.length;
+          } else if (operation === "DECREASE_COST_PCT") {
+            const res = await db.update(materialThicknesses).set({
+              costPerKg: sql`${materialThicknesses.costPerKg} * ${1 - factor}`,
+              updatedAt: new Date(),
+            }).where(eq(materialThicknesses.materialId, m.id)).returning();
+            count += res.length;
+          } else if (operation === "SET_MARGIN_PCT") {
+            const res = await db.update(materialThicknesses).set({
+              marginPercent: String(value),
+              updatedAt: new Date(),
+            }).where(eq(materialThicknesses.materialId, m.id)).returning();
+            count += res.length;
+          } else if (operation === "INCREASE_MARGIN_PCT") {
+            const res = await db.update(materialThicknesses).set({
+              marginPercent: sql`${materialThicknesses.marginPercent} + ${value}`,
+              updatedAt: new Date(),
+            }).where(eq(materialThicknesses.materialId, m.id)).returning();
+            count += res.length;
+          }
+        }
+      }
+    }
+
+    if (target === "ALL" || target === "ARTICLES") {
+      if (operation === "INCREASE_COST_PCT") {
+        const res = await db.update(catalogArticles).set({
+          unitCost: sql`${catalogArticles.unitCost} * ${1 + factor}`,
+          updatedAt: new Date(),
+        }).returning();
+        count += res.length;
+      } else if (operation === "DECREASE_COST_PCT") {
+        const res = await db.update(catalogArticles).set({
+          unitCost: sql`${catalogArticles.unitCost} * ${1 - factor}`,
+          updatedAt: new Date(),
+        }).returning();
+        count += res.length;
+      } else if (operation === "SET_MARGIN_PCT") {
+        const res = await db.update(catalogArticles).set({
+          marginPercent: String(value),
+          updatedAt: new Date(),
+        }).returning();
+        count += res.length;
+      } else if (operation === "INCREASE_MARGIN_PCT") {
+        const res = await db.update(catalogArticles).set({
+          marginPercent: sql`${catalogArticles.marginPercent} + ${value}`,
+          updatedAt: new Date(),
+        }).returning();
+        count += res.length;
+      }
+    }
+
+    if (target === "ARTICLE_FAMILY" && targetId) {
+      const whereClause = eq(catalogArticles.familyId, targetId);
+      if (operation === "INCREASE_COST_PCT") {
+        const res = await db.update(catalogArticles).set({
+          unitCost: sql`${catalogArticles.unitCost} * ${1 + factor}`,
+          updatedAt: new Date(),
+        }).where(whereClause).returning();
+        count += res.length;
+      } else if (operation === "DECREASE_COST_PCT") {
+        const res = await db.update(catalogArticles).set({
+          unitCost: sql`${catalogArticles.unitCost} * ${1 - factor}`,
+          updatedAt: new Date(),
+        }).where(whereClause).returning();
+        count += res.length;
+      } else if (operation === "SET_MARGIN_PCT") {
+        const res = await db.update(catalogArticles).set({
+          marginPercent: String(value),
+          updatedAt: new Date(),
+        }).where(whereClause).returning();
+        count += res.length;
+      } else if (operation === "INCREASE_MARGIN_PCT") {
+        const res = await db.update(catalogArticles).set({
+          marginPercent: sql`${catalogArticles.marginPercent} + ${value}`,
+          updatedAt: new Date(),
+        }).where(whereClause).returning();
+        count += res.length;
+      }
+    }
+
+    return count;
   }
 
   // ============ CATALOGO LATTONERIA: MANODOPERA ============

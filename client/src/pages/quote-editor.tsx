@@ -66,6 +66,7 @@ import type {
   Material,
   MaterialThickness,
   MaterialWithThicknesses,
+  ArticleFamilyWithVariants,
   CatalogArticle,
   LaborRate,
   QuoteItemType,
@@ -190,11 +191,11 @@ interface AddRowDialogProps {
   onClose: () => void;
   onAdd: (draft: QuoteItemDraft) => void;
   materials: MaterialWithThicknesses[];
-  catalogArticles: CatalogArticle[];
+  articleFamilies: ArticleFamilyWithVariants[];
   laborRates: LaborRate[];
 }
 
-function AddRowDialog({ open, onClose, onAdd, materials, catalogArticles, laborRates }: AddRowDialogProps) {
+function AddRowDialog({ open, onClose, onAdd, materials, articleFamilies, laborRates }: AddRowDialogProps) {
   const [type, setType] = useState<QuoteItemType>("LATTONERIA");
 
   useEffect(() => {
@@ -232,7 +233,7 @@ function AddRowDialog({ open, onClose, onAdd, materials, catalogArticles, laborR
           <LattoneriaForm materials={materials} onSubmit={handleSubmit} />
         )}
         {type === "ARTICOLO" && (
-          <ArticoloForm articles={catalogArticles} onSubmit={handleSubmit} />
+          <ArticoloForm articleFamilies={articleFamilies} onSubmit={handleSubmit} />
         )}
         {type === "GIORNATE" && (
           <GiornateForm laborRates={laborRates} onSubmit={handleSubmit} />
@@ -247,11 +248,11 @@ interface EditRowDialogProps {
   onClose: () => void;
   onUpdate: (uid: string, draft: QuoteItemDraftValues) => void;
   materials: MaterialWithThicknesses[];
-  catalogArticles: CatalogArticle[];
+  articleFamilies: ArticleFamilyWithVariants[];
   laborRates: LaborRate[];
 }
 
-function EditRowDialog({ item, onClose, onUpdate, materials, catalogArticles, laborRates }: EditRowDialogProps) {
+function EditRowDialog({ item, onClose, onUpdate, materials, articleFamilies, laborRates }: EditRowDialogProps) {
   const open = item !== null;
 
   const handleSubmit = (d: QuoteItemDraftValues) => {
@@ -281,7 +282,7 @@ function EditRowDialog({ item, onClose, onUpdate, materials, catalogArticles, la
         {item?.type === "ARTICOLO" && (
           <ArticoloForm
             key={item.uid}
-            articles={catalogArticles}
+            articleFamilies={articleFamilies}
             initial={item}
             submitLabel="Salva modifiche"
             submitTestId="button-save-articolo-row"
@@ -343,6 +344,8 @@ function LattoneriaForm({
     [selectedMaterial, selectedThicknessId],
   );
 
+  const isSingle = selectedMaterial?.priceMode === "SINGLE";
+
   // Reset thickness when material changes
   useEffect(() => {
     if (selectedThicknessId && selectedMaterial &&
@@ -357,16 +360,22 @@ function LattoneriaForm({
     const meters = parseFloat(quantity || "0");
     const thickMm = parseFloat(selectedThickness.thicknessMm);
     const density = parseFloat(selectedMaterial.density);
-    const costKg = parseFloat(selectedThickness.costPerKg);
+    // Use material-level price if SINGLE, variant price if PER_VARIANT
+    const costKg = isSingle
+      ? parseFloat(String(selectedMaterial.singleCostPerKg ?? "0"))
+      : parseFloat(String(selectedThickness.costPerKg ?? "0"));
+    const defaultMargin = isSingle
+      ? parseFloat(String(selectedMaterial.singleMarginPercent ?? "0"))
+      : parseFloat(String(selectedThickness.marginPercent ?? "0"));
     const margin = marginOverride !== "" && marginOverride !== undefined
       ? parseFloat(marginOverride)
-      : parseFloat(selectedThickness.marginPercent);
+      : defaultMargin;
     if (!isFinite(dev) || !isFinite(meters) || meters <= 0 || dev <= 0) return null;
     const weightKg = (dev / 1000) * meters * (thickMm / 1000) * density;
     const cost = weightKg * costKg;
     const total = cost * (1 + (isFinite(margin) ? margin : 0) / 100);
     return { weightKg, cost, total, margin: isFinite(margin) ? margin : 0 };
-  }, [selectedMaterial, selectedThickness, developmentMm, quantity, marginOverride]);
+  }, [selectedMaterial, selectedThickness, developmentMm, quantity, marginOverride, isSingle]);
 
   const submit = form.handleSubmit((vals) => {
     onSubmit({
@@ -422,11 +431,17 @@ function LattoneriaForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {(selectedMaterial?.thicknesses || []).map((t) => (
-                    <SelectItem key={t.id} value={t.id} data-testid={`option-thickness-${t.id}`}>
-                      {parseFloat(t.thicknessMm)} mm — {parseFloat(t.costPerKg).toFixed(2)} €/kg
-                    </SelectItem>
-                  ))}
+                  {(selectedMaterial?.thicknesses || []).map((t) => {
+                    const label = `${parseFloat(t.thicknessMm)} mm${t.finish ? " " + t.finish : ""}`;
+                    const priceSuffix = !isSingle && t.costPerKg
+                      ? ` — ${parseFloat(String(t.costPerKg)).toFixed(2)} €/kg`
+                      : "";
+                    return (
+                      <SelectItem key={t.id} value={t.id} data-testid={`option-thickness-${t.id}`}>
+                        {label}{priceSuffix}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -471,7 +486,13 @@ function LattoneriaForm({
                 <Input
                   type="number"
                   step="any"
-                  placeholder={selectedThickness ? parseFloat(selectedThickness.marginPercent).toString() : ""}
+                  placeholder={
+                    isSingle && selectedMaterial
+                      ? parseFloat(String(selectedMaterial.singleMarginPercent ?? "0")).toString()
+                      : selectedThickness
+                        ? parseFloat(String(selectedThickness.marginPercent ?? "0")).toString()
+                        : ""
+                  }
                   {...field}
                   data-testid="input-margin-override"
                 />
@@ -515,18 +536,28 @@ function LattoneriaForm({
 }
 
 function ArticoloForm({
-  articles,
+  articleFamilies,
   onSubmit,
   initial,
   submitLabel = "Aggiungi",
   submitTestId = "button-add-articolo-row",
 }: {
-  articles: CatalogArticle[];
+  articleFamilies: ArticleFamilyWithVariants[];
   onSubmit: (d: QuoteItemDraftValues) => void;
   initial?: QuoteItemDraft;
   submitLabel?: string;
   submitTestId?: string;
 }) {
+  // Find initial family from initial catalogArticleId
+  const initialFamily = useMemo(() => {
+    if (!initial?.catalogArticleId) return null;
+    return articleFamilies.find((f) =>
+      f.variants.some((v) => v.id === initial.catalogArticleId)
+    ) ?? null;
+  }, [initial, articleFamilies]);
+
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string>(initialFamily?.id ?? "");
+
   const form = useForm<z.infer<typeof articoloFormSchema>>({
     resolver: zodResolver(articoloFormSchema),
     defaultValues: {
@@ -537,23 +568,33 @@ function ArticoloForm({
     },
   });
 
-  const selectedId = form.watch("catalogArticleId");
+  const selectedVariantId = form.watch("catalogArticleId");
   const quantity = form.watch("quantity");
   const marginOverride = form.watch("marginPercent");
-  const selected = articles.find((a) => a.id === selectedId);
+
+  const selectedFamily = articleFamilies.find((f) => f.id === selectedFamilyId);
+  const variants = selectedFamily?.variants ?? [];
+  const selectedVariant = variants.find((v) => v.id === selectedVariantId);
+
+  // Reset variant when family changes
+  useEffect(() => {
+    if (selectedVariantId && selectedFamily && !selectedFamily.variants.some((v) => v.id === selectedVariantId)) {
+      form.setValue("catalogArticleId", "");
+    }
+  }, [selectedFamilyId, selectedFamily, selectedVariantId, form]);
 
   const preview = useMemo(() => {
-    if (!selected) return null;
+    if (!selectedVariant) return null;
     const qty = parseFloat(quantity || "0");
     if (!isFinite(qty) || qty <= 0) return null;
-    const unit = parseFloat(selected.unitCost);
+    const unit = parseFloat(selectedVariant.unitCost);
     const margin = marginOverride !== "" && marginOverride !== undefined
       ? parseFloat(marginOverride)
-      : parseFloat(selected.marginPercent);
+      : parseFloat(selectedVariant.marginPercent);
     const cost = unit * qty;
     const total = cost * (1 + (isFinite(margin) ? margin : 0) / 100);
     return { cost, total, margin: isFinite(margin) ? margin : 0 };
-  }, [selected, quantity, marginOverride]);
+  }, [selectedVariant, quantity, marginOverride]);
 
   const submit = form.handleSubmit((vals) => {
     onSubmit({
@@ -562,7 +603,7 @@ function ArticoloForm({
       catalogArticleId: vals.catalogArticleId,
       quantity: vals.quantity,
       marginPercent: vals.marginPercent || undefined,
-      unitOfMeasure: selected?.unitOfMeasure ?? "pz",
+      unitOfMeasure: selectedVariant?.unitOfMeasure ?? selectedFamily?.unitOfMeasure ?? "pz",
       totalRow: preview ? preview.total.toFixed(2) : null,
     });
   });
@@ -570,24 +611,45 @@ function ArticoloForm({
   return (
     <Form {...form}>
       <form onSubmit={submit} className="space-y-3">
+        {/* Step 1: Select Family */}
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Famiglia articoli</label>
+          <Select value={selectedFamilyId} onValueChange={setSelectedFamilyId}>
+            <SelectTrigger data-testid="select-article-family">
+              <SelectValue placeholder="Seleziona famiglia" />
+            </SelectTrigger>
+            <SelectContent>
+              {articleFamilies.map((f) => (
+                <SelectItem key={f.id} value={f.id} data-testid={`option-family-${f.id}`}>
+                  {f.name} ({f.unitOfMeasure})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Step 2: Select Variant */}
         <FormField
           control={form.control}
           name="catalogArticleId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Articolo</FormLabel>
-              <Select value={field.value} onValueChange={field.onChange}>
+              <FormLabel>Variante</FormLabel>
+              <Select value={field.value} onValueChange={field.onChange} disabled={!selectedFamilyId}>
                 <FormControl>
                   <SelectTrigger data-testid="select-catalog-article">
-                    <SelectValue placeholder="Seleziona articolo" />
+                    <SelectValue placeholder="Seleziona variante" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {articles.map((a) => (
-                    <SelectItem key={a.id} value={a.id} data-testid={`option-article-${a.id}`}>
-                      {a.name} — {parseFloat(a.unitCost).toFixed(2)} €/{a.unitOfMeasure}
-                    </SelectItem>
-                  ))}
+                  {variants.map((v) => {
+                    const notesStr = v.notes ? ` (${v.notes})` : "";
+                    return (
+                      <SelectItem key={v.id} value={v.id} data-testid={`option-article-${v.id}`}>
+                        {v.name}{notesStr} — {parseFloat(v.unitCost).toFixed(2)} €/{v.unitOfMeasure}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -599,7 +661,7 @@ function ArticoloForm({
           name="quantity"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Quantità ({selected?.unitOfMeasure || "pz"})</FormLabel>
+              <FormLabel>Quantità ({selectedVariant?.unitOfMeasure || selectedFamily?.unitOfMeasure || "pz"})</FormLabel>
               <FormControl>
                 <Input type="number" step="any" {...field} data-testid="input-quantity-articolo" />
               </FormControl>
@@ -617,7 +679,7 @@ function ArticoloForm({
                 <Input
                   type="number"
                   step="any"
-                  placeholder={selected ? parseFloat(selected.marginPercent).toString() : ""}
+                  placeholder={selectedVariant ? parseFloat(selectedVariant.marginPercent).toString() : ""}
                   {...field}
                   data-testid="input-margin-override-articolo"
                 />
@@ -825,7 +887,7 @@ export default function QuoteEditorPage() {
   const [editingItem, setEditingItem] = useState<QuoteItemDraft | null>(null);
 
   const materialsQuery = useQuery<MaterialWithThicknesses[]>({ queryKey: ["/api/materials"] });
-  const articlesQuery = useQuery<CatalogArticle[]>({ queryKey: ["/api/catalog-articles"] });
+  const articleFamiliesQuery = useQuery<ArticleFamilyWithVariants[]>({ queryKey: ["/api/article-families"] });
   const laborRatesQuery = useQuery<LaborRate[]>({ queryKey: ["/api/labor-rates"] });
 
   // Existing quote (edit mode)
@@ -986,7 +1048,7 @@ export default function QuoteEditorPage() {
 
   const isLoading =
     materialsQuery.isLoading ||
-    articlesQuery.isLoading ||
+    articleFamiliesQuery.isLoading ||
     laborRatesQuery.isLoading ||
     (!isNew && quoteQuery.isLoading) ||
     (isNew && nextNumberQuery.isLoading);
@@ -1012,9 +1074,13 @@ export default function QuoteEditorPage() {
       return `${desc} — sviluppo ${it.developmentMm || "?"}mm × ${it.quantity} ml`;
     }
     if (it.type === "ARTICOLO") {
-      const a = articlesQuery.data?.find((x) => x.id === it.catalogArticleId);
-      const desc = it.description || a?.name || "Articolo";
-      return `${desc} — ${it.quantity} ${it.unitOfMeasure || a?.unitOfMeasure || "pz"}`;
+      let variantName: string | undefined;
+      for (const fam of (articleFamiliesQuery.data ?? [])) {
+        const v = fam.variants.find((x) => x.id === it.catalogArticleId);
+        if (v) { variantName = `${fam.name} – ${v.name}`; break; }
+      }
+      const desc = it.description || variantName || "Articolo";
+      return `${desc} — ${it.quantity} ${it.unitOfMeasure || "pz"}`;
     }
     const l = laborRatesQuery.data?.find((x) => x.id === it.laborRateId);
     const desc = it.description || l?.name || "Manodopera";
@@ -1225,7 +1291,7 @@ export default function QuoteEditorPage() {
         onClose={() => setAddOpen(false)}
         onAdd={(d) => setItems((prev) => [...prev, d])}
         materials={materialsQuery.data || []}
-        catalogArticles={articlesQuery.data || []}
+        articleFamilies={articleFamiliesQuery.data || []}
         laborRates={laborRatesQuery.data || []}
       />
 
@@ -1234,7 +1300,7 @@ export default function QuoteEditorPage() {
         onClose={() => setEditingItem(null)}
         onUpdate={updateItem}
         materials={materialsQuery.data || []}
-        catalogArticles={articlesQuery.data || []}
+        articleFamilies={articleFamiliesQuery.data || []}
         laborRates={laborRatesQuery.data || []}
       />
     </div>

@@ -1506,6 +1506,10 @@ export const materials = pgTable("materials", {
   name: text("name").notNull(),
   // Peso specifico in kg/m³
   density: numeric("density", { precision: 12, scale: 4 }).notNull().default("0"),
+  // 'SINGLE' = prezzo unico per tutti gli spessori, 'PER_VARIANT' = ogni variante ha il suo prezzo
+  priceMode: text("price_mode").notNull().default("SINGLE"),
+  singleCostPerKg: numeric("single_cost_per_kg", { precision: 12, scale: 4 }).default("0"),
+  singleMarginPercent: numeric("single_margin_percent", { precision: 6, scale: 2 }).default("0"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1515,22 +1519,38 @@ export const materialThicknesses = pgTable("material_thicknesses", {
   materialId: varchar("material_id").notNull().references(() => materials.id, { onDelete: "cascade" }),
   // Spessore in millimetri
   thicknessMm: numeric("thickness_mm", { precision: 8, scale: 3 }).notNull(),
-  // Costo al kg in €
-  costPerKg: numeric("cost_per_kg", { precision: 12, scale: 4 }).notNull().default("0"),
-  // Margine % di default applicato in fase di vendita
-  marginPercent: numeric("margin_percent", { precision: 6, scale: 2 }).notNull().default("0"),
+  // Finitura opzionale (es. "Grezzo", "Preverniciato", "RAL 9010")
+  finish: text("finish"),
+  // Costo al kg in € — usato solo in modalità PER_VARIANT
+  costPerKg: numeric("cost_per_kg", { precision: 12, scale: 4 }).default("0"),
+  // Margine % di default — usato solo in modalità PER_VARIANT
+  marginPercent: numeric("margin_percent", { precision: 6, scale: 2 }).default("0"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("material_thicknesses_material_id_idx").on(table.materialId),
 ]);
 
+// Famiglie articoli (es. "Tubo Alluminio Preverniciato")
+export const articleFamilies = pgTable("article_families", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  unitOfMeasure: text("unit_of_measure").notNull().default("mt"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const catalogArticles = pgTable("catalog_articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // familyId collega la variante alla sua famiglia
+  familyId: varchar("family_id").references(() => articleFamilies.id, { onDelete: "cascade" }),
+  // name diventa l'etichetta variante (es. "Diam. 60")
   name: text("name").notNull(),
   unitCost: numeric("unit_cost", { precision: 12, scale: 4 }).notNull().default("0"),
   marginPercent: numeric("margin_percent", { precision: 6, scale: 2 }).notNull().default("0"),
   unitOfMeasure: text("unit_of_measure").notNull().default("pz"),
+  // Note aggiuntive (es. "spessore 0.8mm")
+  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1556,6 +1576,17 @@ export const materialThicknessesRelations = relations(materialThicknesses, ({ on
   }),
 }));
 
+export const articleFamiliesRelations = relations(articleFamilies, ({ many }) => ({
+  variants: many(catalogArticles),
+}));
+
+export const catalogArticlesRelations = relations(catalogArticles, ({ one }) => ({
+  family: one(articleFamilies, {
+    fields: [catalogArticles.familyId],
+    references: [articleFamilies.id],
+  }),
+}));
+
 const catalogNumericString = z.union([z.string(), z.number()])
   .transform(v => String(v))
   .refine(v => !isNaN(parseFloat(v)), { message: "Valore numerico non valido" });
@@ -1567,6 +1598,9 @@ export const insertMaterialSchema = createInsertSchema(materials).omit({
 }).extend({
   name: z.string().min(1, "Il nome è obbligatorio"),
   density: catalogNumericString.refine(v => parseFloat(v) > 0, { message: "Il peso specifico deve essere maggiore di 0" }),
+  priceMode: z.enum(["SINGLE", "PER_VARIANT"]).default("SINGLE"),
+  singleCostPerKg: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il costo deve essere >= 0" }).optional(),
+  singleMarginPercent: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il margine deve essere >= 0" }).optional(),
 });
 
 export const insertMaterialThicknessSchema = createInsertSchema(materialThicknesses).omit({
@@ -1576,8 +1610,18 @@ export const insertMaterialThicknessSchema = createInsertSchema(materialThicknes
 }).extend({
   materialId: z.string().min(1, "Seleziona un materiale"),
   thicknessMm: catalogNumericString.refine(v => parseFloat(v) > 0, { message: "Lo spessore deve essere maggiore di 0" }),
-  costPerKg: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il costo al kg deve essere >= 0" }),
-  marginPercent: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il margine deve essere >= 0" }),
+  finish: z.string().optional().nullable(),
+  costPerKg: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il costo al kg deve essere >= 0" }).optional(),
+  marginPercent: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il margine deve essere >= 0" }).optional(),
+});
+
+export const insertArticleFamilySchema = createInsertSchema(articleFamilies).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().min(1, "Il nome è obbligatorio"),
+  unitOfMeasure: z.string().min(1, "L'unità di misura è obbligatoria"),
 });
 
 export const insertCatalogArticleSchema = createInsertSchema(catalogArticles).omit({
@@ -1586,6 +1630,8 @@ export const insertCatalogArticleSchema = createInsertSchema(catalogArticles).om
   updatedAt: true,
 }).extend({
   name: z.string().min(1, "Il nome è obbligatorio"),
+  familyId: z.string().min(1, "Seleziona una famiglia").optional().nullable(),
+  notes: z.string().optional().nullable(),
   unitCost: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il costo unitario deve essere >= 0" }),
   marginPercent: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il margine deve essere >= 0" }),
   unitOfMeasure: z.string().min(1, "L'unità di misura è obbligatoria"),
@@ -1601,12 +1647,18 @@ export const insertLaborRateSchema = createInsertSchema(laborRates).omit({
   marginPercent: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il margine deve essere >= 0" }),
 });
 
+export type MaterialPriceMode = "SINGLE" | "PER_VARIANT";
+
 export type Material = typeof materials.$inferSelect;
 export type InsertMaterial = z.infer<typeof insertMaterialSchema>;
 
 export type MaterialThickness = typeof materialThicknesses.$inferSelect;
 export type InsertMaterialThickness = z.infer<typeof insertMaterialThicknessSchema>;
 export type MaterialWithThicknesses = Material & { thicknesses: MaterialThickness[] };
+
+export type ArticleFamily = typeof articleFamilies.$inferSelect;
+export type InsertArticleFamily = z.infer<typeof insertArticleFamilySchema>;
+export type ArticleFamilyWithVariants = ArticleFamily & { variants: CatalogArticle[] };
 
 export type CatalogArticle = typeof catalogArticles.$inferSelect;
 export type InsertCatalogArticle = z.infer<typeof insertCatalogArticleSchema>;
