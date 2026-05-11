@@ -203,6 +203,7 @@ interface QuotePdfProps {
   customer: PdfCustomer | null;
   quote: PdfQuote;
   opportunityTitle?: string | null;
+  paymentMethodName?: string | null;
 }
 
 function safeDate(d: string | Date | undefined | null): string {
@@ -215,7 +216,7 @@ function safeDate(d: string | Date | undefined | null): string {
   }
 }
 
-export const QuotePdfDocument = ({ company, customer, quote, opportunityTitle }: QuotePdfProps) => {
+export const QuotePdfDocument = ({ company, customer, quote, opportunityTitle, paymentMethodName }: QuotePdfProps) => {
   const totals = computeTotals(quote, 22);
   const customerInitial = (customerDisplayName(customer) || company.name || "?").charAt(0).toUpperCase();
   const companyInitial = (company.name || "?").charAt(0).toUpperCase();
@@ -366,10 +367,10 @@ export const QuotePdfDocument = ({ company, customer, quote, opportunityTitle }:
         </View>
 
         {/* Modalità pagamento */}
-        {(company.quotePaymentTerms || company.iban || company.bankName || company.bankHolder) && (
+        {(paymentMethodName || company.iban || company.bankName || company.bankHolder) && (
           <View style={styles.card} wrap={false}>
             <Text style={styles.cardTitle}>Modalità di pagamento</Text>
-            {company.quotePaymentTerms ? <Text style={styles.cardLine}>{company.quotePaymentTerms}</Text> : null}
+            {paymentMethodName ? <Text style={styles.cardLine}>{paymentMethodName}</Text> : null}
             {company.iban ? <Text style={styles.cardLine}>IBAN: {company.iban}</Text> : null}
             {company.bankName ? <Text style={styles.cardLine}>Banca: {company.bankName}</Text> : null}
             {company.bankHolder ? <Text style={styles.cardLine}>Intestatario: {company.bankHolder}</Text> : null}

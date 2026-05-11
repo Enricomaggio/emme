@@ -1062,7 +1062,6 @@ export default function SettingsPage() {
     bankName: "",
     bankHolder: "",
     bankSwift: "",
-    quotePaymentTerms: "",
     quoteValidityDays: "30",
     quoteFooterNotes: "",
     emailSubjectTemplate: "",
@@ -1087,7 +1086,6 @@ export default function SettingsPage() {
         bankName: company.bankName || "",
         bankHolder: company.bankHolder || "",
         bankSwift: company.bankSwift || "",
-        quotePaymentTerms: company.quotePaymentTerms || "",
         quoteValidityDays: String(company.quoteValidityDays ?? 30),
         quoteFooterNotes: company.quoteFooterNotes || "",
         emailSubjectTemplate: company.emailSubjectTemplate || "",
@@ -1708,18 +1706,6 @@ export default function SettingsPage() {
                         onChange={(e) =>
                           handleCompanyChange("quoteValidityDays", e.target.value)
                         }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="company-payment-terms">Modalità di pagamento</Label>
-                      <Input
-                        id="company-payment-terms"
-                        data-testid="input-company-payment-terms"
-                        value={companyForm.quotePaymentTerms}
-                        onChange={(e) =>
-                          handleCompanyChange("quotePaymentTerms", e.target.value)
-                        }
-                        placeholder="Bonifico bancario a 30 gg fine mese"
                       />
                     </div>
                   </div>

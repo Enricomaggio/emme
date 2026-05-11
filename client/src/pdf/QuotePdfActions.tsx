@@ -37,6 +37,7 @@ import {
 
 interface LeadResponse extends PdfCustomer {
   id: string;
+  paymentMethodId?: string | null;
 }
 
 interface Props {
@@ -63,6 +64,15 @@ export function QuotePdfActions({ quote, opportunity, opportunityLoading = false
     enabled: !!leadId,
   });
 
+  const paymentMethodsQuery = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/payment-methods"],
+  });
+
+  const paymentMethodName = useMemo(() => {
+    if (!leadQuery.data?.paymentMethodId || !paymentMethodsQuery.data) return null;
+    return paymentMethodsQuery.data.find((pm) => pm.id === leadQuery.data?.paymentMethodId)?.name ?? null;
+  }, [leadQuery.data, paymentMethodsQuery.data]);
+
   const enrichedQuote: PdfQuote = useMemo(() => {
     return {
       ...quote,
@@ -81,8 +91,9 @@ export function QuotePdfActions({ quote, opportunity, opportunityLoading = false
     };
   }, [companyQuery.data]);
 
-  const dependentDataLoading = opportunityLoading || (!!leadId && leadQuery.isLoading) || companyQuery.isLoading;
-  const dataReady = !!resolvedCompany && !opportunityLoading && !(!!leadId && leadQuery.isLoading);
+  const paymentMethodPending = !!leadQuery.data?.paymentMethodId && paymentMethodsQuery.isLoading;
+  const dependentDataLoading = opportunityLoading || (!!leadId && leadQuery.isLoading) || companyQuery.isLoading || paymentMethodPending;
+  const dataReady = !!resolvedCompany && !opportunityLoading && !(!!leadId && leadQuery.isLoading) && !paymentMethodPending;
   const customerMissing = !!leadId && !leadQuery.isLoading && !leadQuery.data;
   const opportunityMissing = !opportunityLoading && !opportunity;
 
@@ -110,6 +121,7 @@ export function QuotePdfActions({ quote, opportunity, opportunityLoading = false
         customer={leadQuery.data ?? null}
         quote={enrichedQuote}
         opportunityTitle={opportunity?.title}
+        paymentMethodName={paymentMethodName}
       />,
     ).toBlob();
   }
@@ -282,6 +294,7 @@ export function QuotePdfActions({ quote, opportunity, opportunityLoading = false
                   customer={leadQuery.data ?? null}
                   quote={enrichedQuote}
                   opportunityTitle={opportunity?.title}
+                  paymentMethodName={paymentMethodName}
                 />
               </PDFViewer>
             ) : (
