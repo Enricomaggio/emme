@@ -1425,6 +1425,7 @@ export default function QuoteEditorPage() {
             <QuotePdfActions
               quote={buildPdfQuote(quoteQuery.data)}
               opportunity={opportunityQuery.data ?? null}
+              opportunityLoading={opportunityQuery.isLoading}
               resolveItemName={(id) => {
                 const it = quoteQuery.data!.items.find((x) => x.id === id);
                 if (!it) return undefined;

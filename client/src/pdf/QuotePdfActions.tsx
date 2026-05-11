@@ -42,11 +42,12 @@ interface LeadResponse extends PdfCustomer {
 interface Props {
   quote: PdfQuote;
   opportunity: Opportunity | null | undefined;
+  opportunityLoading?: boolean;
   resolveItemName: (itemId: string) => string | undefined;
   disabled?: boolean;
 }
 
-export function QuotePdfActions({ quote, opportunity, resolveItemName, disabled }: Props) {
+export function QuotePdfActions({ quote, opportunity, opportunityLoading = false, resolveItemName, disabled }: Props) {
   const { toast } = useToast();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -80,11 +81,13 @@ export function QuotePdfActions({ quote, opportunity, resolveItemName, disabled 
     };
   }, [companyQuery.data]);
 
-  const dataReady = !!resolvedCompany;
+  const dependentDataLoading = opportunityLoading || (!!leadId && leadQuery.isLoading) || companyQuery.isLoading;
+  const dataReady = !!resolvedCompany && !opportunityLoading && !(!!leadId && leadQuery.isLoading);
   const customerMissing = !!leadId && !leadQuery.isLoading && !leadQuery.data;
-  const opportunityMissing = !opportunity;
+  const opportunityMissing = !opportunityLoading && !opportunity;
 
   function warnIfDataIncomplete(): boolean {
+    if (dependentDataLoading) return true;
     if (opportunityMissing || customerMissing) {
       const parts: string[] = [];
       if (opportunityMissing) parts.push("opportunità");
@@ -179,7 +182,10 @@ export function QuotePdfActions({ quote, opportunity, resolveItemName, disabled 
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" disabled={disabled || !dataReady} data-testid="button-pdf-actions">
+          <Button variant="outline" disabled={disabled || dependentDataLoading || (!companyQuery.isLoading && !resolvedCompany)} data-testid="button-pdf-actions">
+            {dependentDataLoading ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : null}
             Azioni PDF
             <ChevronDown className="w-4 h-4 ml-2" />
           </Button>
@@ -269,10 +275,10 @@ export function QuotePdfActions({ quote, opportunity, resolveItemName, disabled 
             </div>
           </DialogHeader>
           <div className="flex-1 px-4 pb-4">
-            {dataReady ? (
+            {dataReady && resolvedCompany ? (
               <PDFViewer style={{ width: "100%", height: "100%", border: "none" }}>
                 <QuotePdfDocument
-                  company={resolvedCompany!}
+                  company={resolvedCompany}
                   customer={leadQuery.data ?? null}
                   quote={enrichedQuote}
                   opportunityTitle={opportunity?.title}
