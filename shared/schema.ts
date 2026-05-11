@@ -647,6 +647,7 @@ export const quoteItems = pgTable("quote_items", {
   // FK Catalogo Lattoneria (uno solo valorizzato in base al type)
   materialId: varchar("material_id").references(() => materials.id),
   materialThicknessId: varchar("material_thickness_id").references(() => materialThicknesses.id),
+  materialFinishId: varchar("material_finish_id").references(() => materialFinishes.id, { onDelete: "set null" }),
   catalogArticleId: varchar("catalog_article_id").references(() => catalogArticles.id),
   laborRateId: varchar("labor_rate_id").references(() => laborRates.id),
 
@@ -1565,14 +1566,34 @@ export const laborRates = pgTable("labor_rates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Finiture per spessore (es. "rosso siena", "RAL 9010")
+export const materialFinishes = pgTable("material_finishes", {
+  id:          varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  thicknessId: varchar("thickness_id").notNull()
+                 .references(() => materialThicknesses.id, { onDelete: "cascade" }),
+  name:        text("name").notNull(),
+  sortOrder:   integer("sort_order").notNull().default(0),
+  createdAt:   timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("material_finishes_thickness_id_idx").on(table.thicknessId),
+]);
+
 export const materialsRelations = relations(materials, ({ many }) => ({
   thicknesses: many(materialThicknesses),
 }));
 
-export const materialThicknessesRelations = relations(materialThicknesses, ({ one }) => ({
+export const materialThicknessesRelations = relations(materialThicknesses, ({ one, many }) => ({
   material: one(materials, {
     fields: [materialThicknesses.materialId],
     references: [materials.id],
+  }),
+  finishes: many(materialFinishes),
+}));
+
+export const materialFinishesRelations = relations(materialFinishes, ({ one }) => ({
+  thickness: one(materialThicknesses, {
+    fields: [materialFinishes.thicknessId],
+    references: [materialThicknesses.id],
   }),
 }));
 
@@ -1647,6 +1668,14 @@ export const insertLaborRateSchema = createInsertSchema(laborRates).omit({
   marginPercent: catalogNumericString.refine(v => parseFloat(v) >= 0, { message: "Il margine deve essere >= 0" }),
 });
 
+export const insertMaterialFinishSchema = createInsertSchema(materialFinishes).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  name: z.string().min(1, "Il nome è obbligatorio"),
+  sortOrder: z.number().int().min(0).default(0),
+});
+
 export type MaterialPriceMode = "SINGLE" | "PER_VARIANT";
 
 export type Material = typeof materials.$inferSelect;
@@ -1654,7 +1683,12 @@ export type InsertMaterial = z.infer<typeof insertMaterialSchema>;
 
 export type MaterialThickness = typeof materialThicknesses.$inferSelect;
 export type InsertMaterialThickness = z.infer<typeof insertMaterialThicknessSchema>;
-export type MaterialWithThicknesses = Material & { thicknesses: MaterialThickness[] };
+
+export type MaterialFinish = typeof materialFinishes.$inferSelect;
+export type InsertMaterialFinish = z.infer<typeof insertMaterialFinishSchema>;
+
+export type MaterialThicknessWithFinishes = MaterialThickness & { finishes: MaterialFinish[] };
+export type MaterialWithThicknesses = Material & { thicknesses: MaterialThicknessWithFinishes[] };
 
 export type ArticleFamily = typeof articleFamilies.$inferSelect;
 export type InsertArticleFamily = z.infer<typeof insertArticleFamilySchema>;

@@ -4,6 +4,7 @@ import { isAuthenticated } from "../auth";
 import {
   insertMaterialSchema,
   insertMaterialThicknessSchema,
+  insertMaterialFinishSchema,
   insertArticleFamilySchema,
   insertCatalogArticleSchema,
   insertLaborRateSchema,
@@ -216,6 +217,73 @@ catalogRouter.delete("/material-thicknesses/:id", isAuthenticated, async (req, r
       });
     }
     res.status(500).json({ message: "Errore nell'eliminazione dello spessore" });
+  }
+});
+
+// ============ FINITURE MATERIALI ============
+
+const updateMaterialFinishSchema = insertMaterialFinishSchema.partial();
+
+catalogRouter.post("/material-thicknesses/:id/finishes", isAuthenticated, async (req, res) => {
+  try {
+    const { role } = req.user!;
+    if (!isCatalogAdmin(role)) {
+      return res.status(403).json({ message: "Solo gli amministratori possono aggiungere finiture" });
+    }
+    const body = { ...req.body, thicknessId: req.params.id };
+    const parsed = insertMaterialFinishSchema.safeParse(body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Dati non validi",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+    }
+    const created = await storage.createMaterialFinish(parsed.data);
+    res.status(201).json(created);
+  } catch (error) {
+    console.error("Error creating material finish:", error);
+    res.status(500).json({ message: "Errore nella creazione della finitura" });
+  }
+});
+
+catalogRouter.put("/material-finishes/:id", isAuthenticated, async (req, res) => {
+  try {
+    const { role } = req.user!;
+    if (!isCatalogAdmin(role)) {
+      return res.status(403).json({ message: "Solo gli amministratori possono modificare finiture" });
+    }
+    const parsed = updateMaterialFinishSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Dati non validi",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+    }
+    const updated = await storage.updateMaterialFinish(req.params.id, parsed.data);
+    if (!updated) {
+      return res.status(404).json({ message: "Finitura non trovata" });
+    }
+    res.json(updated);
+  } catch (error) {
+    console.error("Error updating material finish:", error);
+    res.status(500).json({ message: "Errore nell'aggiornamento della finitura" });
+  }
+});
+
+catalogRouter.delete("/material-finishes/:id", isAuthenticated, async (req, res) => {
+  try {
+    const { role } = req.user!;
+    if (!isCatalogAdmin(role)) {
+      return res.status(403).json({ message: "Solo gli amministratori possono eliminare finiture" });
+    }
+    const deleted = await storage.deleteMaterialFinish(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Finitura non trovata" });
+    }
+    res.status(204).send();
+  } catch (error) {
+    console.error("Error deleting material finish:", error);
+    res.status(500).json({ message: "Errore nell'eliminazione della finitura" });
   }
 });
 

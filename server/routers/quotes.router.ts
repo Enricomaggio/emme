@@ -38,6 +38,7 @@ const lattoneriaItemSchema = itemBaseSchema.extend({
   type: z.literal("LATTONERIA"),
   materialId: z.string().min(1, "Materiale obbligatorio"),
   materialThicknessId: z.string().min(1, "Spessore obbligatorio"),
+  materialFinishId: z.string().optional().nullable(),
   developmentMm: z.coerce.number().positive("Sviluppo deve essere > 0"),
   quantity: z.coerce.number().positive("Metri lineari devono essere > 0"),
 });
@@ -85,6 +86,7 @@ interface ComputedItem {
   // FKs
   materialId: string | null;
   materialThicknessId: string | null;
+  materialFinishId: string | null;
   catalogArticleId: string | null;
   laborRateId: string | null;
 }
@@ -109,6 +111,17 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       throw new ValidationCatalogError(`Lo spessore selezionato non appartiene al materiale scelto`);
     }
 
+    let finish = null;
+    if (input.materialFinishId) {
+      finish = await storage.getMaterialFinish(input.materialFinishId);
+      if (!finish) {
+        throw new NotFoundCatalogError(`Finitura non trovata: ${input.materialFinishId}`);
+      }
+      if (finish.thicknessId !== thickness.id) {
+        throw new ValidationCatalogError(`La finitura selezionata non appartiene allo spessore scelto`);
+      }
+    }
+
     const developmentMm = Number(input.developmentMm);
     const meters = Number(input.quantity);
     const thicknessMm = parseFloat(thickness.thicknessMm);
@@ -126,9 +139,13 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
     const total = cost * (1 + margin / 100);
     const unitPrice = meters > 0 ? total / meters : 0;
 
+    const defaultDescription = finish
+      ? `${material.name} ${thicknessMm}mm — ${finish.name}`
+      : `${material.name} ${thicknessMm}mm`;
+
     return {
       type: "LATTONERIA",
-      description: input.description?.trim() || `${material.name} ${thicknessMm}mm`,
+      description: input.description?.trim() || defaultDescription,
       unitOfMeasure: "ml",
       developmentMm: String(round2(developmentMm)),
       quantity: String(round4(meters)),
@@ -139,6 +156,7 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       totalRow: String(round2(total)),
       materialId: material.id,
       materialThicknessId: thickness.id,
+      materialFinishId: input.materialFinishId ?? null,
       catalogArticleId: null,
       laborRateId: null,
     };
@@ -171,6 +189,7 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       totalRow: String(round2(total)),
       materialId: null,
       materialThicknessId: null,
+      materialFinishId: null,
       catalogArticleId: article.id,
       laborRateId: null,
     };
@@ -203,6 +222,7 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
     totalRow: String(round2(total)),
     materialId: null,
     materialThicknessId: null,
+    materialFinishId: null,
     catalogArticleId: null,
     laborRateId: labor.id,
   };
@@ -214,6 +234,7 @@ function toInsertItem(quoteId: string, computed: ComputedItem, displayOrder: num
     type: computed.type,
     materialId: computed.materialId,
     materialThicknessId: computed.materialThicknessId,
+    materialFinishId: computed.materialFinishId,
     catalogArticleId: computed.catalogArticleId,
     laborRateId: computed.laborRateId,
     description: computed.description,

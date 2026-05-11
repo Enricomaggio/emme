@@ -1,7 +1,7 @@
 import { 
   companies, leads, userCompanies, users, pipelineStages, opportunities, activityLogs, invites, contactReferents, articles, quotes, quoteItems, projectStages, projects, projectTasks,
   workers, teams, drivers, vehicles, dailyAssignments, teamMembers, paymentMethods, leadSources, reminders, billingProfiles, notifications, notificationPreferences, clauseOverrides, salesTargets, externalEngineers, warehouseBalances,
-  materials, materialThicknesses, articleFamilies, catalogArticles, laborRates,
+  materials, materialThicknesses, materialFinishes, articleFamilies, catalogArticles, laborRates,
   type Company, type InsertCompany,
   type Lead, type InsertLead,
   type UserCompany, type InsertUserCompany,
@@ -34,6 +34,7 @@ import {
   type WarehouseBalance, type InsertWarehouseBalance,
   type Material, type InsertMaterial, type MaterialWithThicknesses,
   type MaterialThickness, type InsertMaterialThickness,
+  type MaterialFinish, type InsertMaterialFinish,
   type ArticleFamily, type InsertArticleFamily, type ArticleFamilyWithVariants,
   type CatalogArticle, type InsertCatalogArticle,
   type LaborRate, type InsertLaborRate,
@@ -157,6 +158,12 @@ export interface IStorage {
   createMaterialThickness(data: InsertMaterialThickness): Promise<MaterialThickness>;
   updateMaterialThickness(id: string, data: Partial<InsertMaterialThickness>): Promise<MaterialThickness | undefined>;
   deleteMaterialThickness(id: string): Promise<boolean>;
+
+  // Catalogo Lattoneria — Finiture (FK su material_thicknesses)
+  getMaterialFinish(id: string): Promise<MaterialFinish | undefined>;
+  createMaterialFinish(data: InsertMaterialFinish): Promise<MaterialFinish>;
+  updateMaterialFinish(id: string, data: Partial<InsertMaterialFinish>): Promise<MaterialFinish | undefined>;
+  deleteMaterialFinish(id: string): Promise<boolean>;
 
   // Catalogo Lattoneria — Famiglie articoli
   getArticleFamilies(): Promise<ArticleFamilyWithVariants[]>;
@@ -1328,6 +1335,11 @@ export class DatabaseStorage implements IStorage {
       with: {
         thicknesses: {
           orderBy: (t, { asc }) => [asc(t.thicknessMm)],
+          with: {
+            finishes: {
+              orderBy: (f, { asc }) => [asc(f.sortOrder), asc(f.createdAt)],
+            },
+          },
         },
       },
       orderBy: (m, { asc }) => [asc(m.name)],
@@ -1381,6 +1393,32 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMaterialThickness(id: string): Promise<boolean> {
     const result = await db.delete(materialThicknesses).where(eq(materialThicknesses.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // ============ CATALOGO LATTONERIA: FINITURE ============
+
+  async getMaterialFinish(id: string): Promise<MaterialFinish | undefined> {
+    const [f] = await db.select().from(materialFinishes).where(eq(materialFinishes.id, id));
+    return f || undefined;
+  }
+
+  async createMaterialFinish(data: InsertMaterialFinish): Promise<MaterialFinish> {
+    const [f] = await db.insert(materialFinishes).values(data).returning();
+    return f;
+  }
+
+  async updateMaterialFinish(id: string, data: Partial<InsertMaterialFinish>): Promise<MaterialFinish | undefined> {
+    const [f] = await db
+      .update(materialFinishes)
+      .set(data)
+      .where(eq(materialFinishes.id, id))
+      .returning();
+    return f || undefined;
+  }
+
+  async deleteMaterialFinish(id: string): Promise<boolean> {
+    const result = await db.delete(materialFinishes).where(eq(materialFinishes.id, id)).returning();
     return result.length > 0;
   }
 

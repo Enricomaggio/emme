@@ -68,11 +68,14 @@ import { formatCurrency } from "@/lib/formatCurrency";
 import {
   insertMaterialSchema,
   insertMaterialThicknessSchema,
+  insertMaterialFinishSchema,
   insertArticleFamilySchema,
   insertCatalogArticleSchema,
   insertLaborRateSchema,
   type Material,
   type MaterialThickness,
+  type MaterialThicknessWithFinishes,
+  type MaterialFinish,
   type MaterialWithThicknesses,
   type ArticleFamily,
   type ArticleFamilyWithVariants,
@@ -80,6 +83,7 @@ import {
   type LaborRate,
   type InsertMaterial,
   type InsertMaterialThickness,
+  type InsertMaterialFinish,
   type InsertArticleFamily,
   type InsertCatalogArticle,
   type InsertLaborRate,
@@ -263,48 +267,45 @@ function ThicknessForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="thicknessMm"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Spessore (mm)</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    inputMode="decimal"
-                    placeholder="Es. 0.6"
-                    {...field}
-                    value={field.value ?? ""}
-                    data-testid="input-spessore-mm"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="finish"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Finitura (opzionale)</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Es. Grezzo, Preverniciato"
-                    {...field}
-                    value={field.value ?? ""}
-                    data-testid="input-spessore-finitura"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+        <FormField
+          control={form.control}
+          name="thicknessMm"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Spessore (mm)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  inputMode="decimal"
+                  placeholder="Es. 0.6"
+                  {...field}
+                  value={field.value ?? ""}
+                  data-testid="input-spessore-mm"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="finish"
+          render={({ field }) => (
+            <FormItem className="hidden" aria-hidden="true">
+              <FormControl>
+                <Input
+                  {...field}
+                  value={field.value ?? ""}
+                  data-testid="input-spessore-finitura"
+                  tabIndex={-1}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
 
         {isPERVariant && (
           <div className="grid grid-cols-2 gap-4">
@@ -370,16 +371,76 @@ function ThicknessForm({
   );
 }
 
+function FinishForm({
+  defaultValues,
+  onSubmit,
+  isPending,
+  submitLabel,
+}: {
+  defaultValues: Partial<InsertMaterialFinish> & { thicknessId: string };
+  onSubmit: (values: InsertMaterialFinish) => void;
+  isPending: boolean;
+  submitLabel: string;
+}) {
+  const form = useForm<InsertMaterialFinish>({
+    resolver: zodResolver(insertMaterialFinishSchema),
+    defaultValues: {
+      thicknessId: defaultValues.thicknessId,
+      name: defaultValues.name ?? "",
+      sortOrder: defaultValues.sortOrder ?? 0,
+    },
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Nome finitura</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Es. rosso siena, RAL 9010, colore di serie"
+                  {...field}
+                  data-testid="input-finitura-nome"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <DialogFooter>
+          <Button
+            type="submit"
+            disabled={isPending}
+            data-testid="button-conferma-finitura"
+          >
+            {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {submitLabel}
+          </Button>
+        </DialogFooter>
+      </form>
+    </Form>
+  );
+}
+
 function MaterialiTab() {
   const { toast } = useToast();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expandedMaterials, setExpandedMaterials] = useState<Record<string, boolean>>({});
+  const [expandedThicknesses, setExpandedThicknesses] = useState<Record<string, boolean>>({});
   const [createMaterialOpen, setCreateMaterialOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [deletingMaterial, setDeletingMaterial] = useState<Material | null>(null);
 
   const [createThicknessFor, setCreateThicknessFor] = useState<MaterialWithThicknesses | null>(null);
-  const [editingThickness, setEditingThickness] = useState<{ thickness: MaterialThickness; priceMode: string } | null>(null);
-  const [deletingThickness, setDeletingThickness] = useState<MaterialThickness | null>(null);
+  const [editingThickness, setEditingThickness] = useState<{ thickness: MaterialThicknessWithFinishes; priceMode: string } | null>(null);
+  const [deletingThickness, setDeletingThickness] = useState<MaterialThicknessWithFinishes | null>(null);
+
+  const [createFinishFor, setCreateFinishFor] = useState<MaterialThicknessWithFinishes | null>(null);
+  const [editingFinish, setEditingFinish] = useState<MaterialFinish | null>(null);
+  const [deletingFinish, setDeletingFinish] = useState<MaterialFinish | null>(null);
 
   const { data: materials = [], isLoading } = useQuery<MaterialWithThicknesses[]>({
     queryKey: ["/api/materials"],
@@ -475,8 +536,53 @@ function MaterialiTab() {
     },
   });
 
-  function toggleExpanded(id: string) {
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  const createFinishMut = useMutation({
+    mutationFn: async ({ thicknessId, data }: { thicknessId: string; data: { name: string } }) => {
+      const res = await apiRequest("POST", `/api/material-thicknesses/${thicknessId}/finishes`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Finitura aggiunta" });
+      setCreateFinishFor(null);
+      invalidate();
+    },
+    onError: onMutationError,
+  });
+
+  const updateFinishMut = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { name: string } }) => {
+      const res = await apiRequest("PUT", `/api/material-finishes/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Finitura aggiornata" });
+      setEditingFinish(null);
+      invalidate();
+    },
+    onError: onMutationError,
+  });
+
+  const deleteFinishMut = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/material-finishes/${id}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Finitura eliminata" });
+      setDeletingFinish(null);
+      invalidate();
+    },
+    onError: (err: Error) => {
+      onMutationError(err);
+      setDeletingFinish(null);
+    },
+  });
+
+  function toggleMaterial(id: string) {
+    setExpandedMaterials((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function toggleThickness(id: string) {
+    setExpandedThicknesses((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
   return (
@@ -485,7 +591,7 @@ function MaterialiTab() {
         <div>
           <h2 className="text-lg font-semibold">Materiali</h2>
           <p className="text-sm text-muted-foreground">
-            Materiali di lattoneria con peso specifico (kg/m³). Ogni materiale ha più spessori/varianti.
+            Materiali di lattoneria con peso specifico (kg/m³). Ogni materiale ha più spessori/varianti, ognuno con le proprie finiture.
           </p>
         </div>
         <Button
@@ -513,19 +619,20 @@ function MaterialiTab() {
         ) : (
           <div className="divide-y">
             {materials.map((mat) => {
-              const isOpen = !!expanded[mat.id];
+              const matOpen = !!expandedMaterials[mat.id];
               const isSingle = mat.priceMode === "SINGLE";
               return (
                 <div key={mat.id} data-testid={`row-materiale-${mat.id}`}>
+                  {/* ── Riga Materiale ── */}
                   <div className="flex items-center gap-2 p-3 hover-elevate">
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => toggleExpanded(mat.id)}
+                      onClick={() => toggleMaterial(mat.id)}
                       data-testid={`button-toggle-materiale-${mat.id}`}
                     >
-                      {isOpen ? (
+                      {matOpen ? (
                         <ChevronDown className="w-4 h-4" />
                       ) : (
                         <ChevronRight className="w-4 h-4" />
@@ -581,88 +688,152 @@ function MaterialiTab() {
                     </Button>
                   </div>
 
-                  {isOpen && (
-                    <div className="bg-muted/30 px-4 pb-4">
+                  {/* ── Spessori espansi ── */}
+                  {matOpen && (
+                    <div className="bg-muted/20 border-t">
                       {mat.thicknesses.length === 0 ? (
                         <div
-                          className="text-sm text-muted-foreground py-3"
+                          className="text-sm text-muted-foreground py-3 px-8"
                           data-testid={`empty-spessori-${mat.id}`}
                         >
                           Nessuno spessore inserito per questo materiale.
                         </div>
                       ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Spessore (mm)</TableHead>
-                              <TableHead>Finitura</TableHead>
-                              {!isSingle && (
-                                <>
-                                  <TableHead className="text-right">Costo €/kg</TableHead>
-                                  <TableHead className="text-right">Margine %</TableHead>
-                                </>
-                              )}
-                              <TableHead className="w-[110px] text-right">Azioni</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {mat.thicknesses.map((th) => (
-                              <TableRow
-                                key={th.id}
-                                data-testid={`row-spessore-${th.id}`}
-                              >
-                                <TableCell
-                                  className="font-medium"
-                                  data-testid={`text-spessore-mm-${th.id}`}
-                                >
-                                  {num(th.thicknessMm)} mm
-                                </TableCell>
-                                <TableCell
-                                  className="text-muted-foreground"
-                                  data-testid={`text-spessore-finitura-${th.id}`}
-                                >
-                                  {th.finish || "—"}
-                                </TableCell>
-                                {!isSingle && (
-                                  <>
-                                    <TableCell
-                                      className="text-right"
-                                      data-testid={`text-spessore-costo-${th.id}`}
-                                    >
-                                      € {formatCurrency(num(th.costPerKg))}
-                                    </TableCell>
-                                    <TableCell
-                                      className="text-right"
-                                      data-testid={`text-spessore-margine-${th.id}`}
-                                    >
-                                      {num(th.marginPercent)}%
-                                    </TableCell>
-                                  </>
-                                )}
-                                <TableCell className="text-right">
-                                  <div className="flex justify-end gap-1">
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      onClick={() => setEditingThickness({ thickness: th, priceMode: mat.priceMode })}
-                                      data-testid={`button-modifica-spessore-${th.id}`}
-                                    >
-                                      <Pencil className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      onClick={() => setDeletingThickness(th)}
-                                      data-testid={`button-elimina-spessore-${th.id}`}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
+                        <div className="divide-y">
+                          {mat.thicknesses.map((th) => {
+                            const thOpen = !!expandedThicknesses[th.id];
+                            return (
+                              <div key={th.id} data-testid={`row-spessore-${th.id}`}>
+                                {/* ── Riga Spessore ── */}
+                                <div className="flex items-center gap-2 px-4 py-2 hover-elevate">
+                                  <div className="w-6" />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => toggleThickness(th.id)}
+                                    data-testid={`button-toggle-spessore-${th.id}`}
+                                  >
+                                    {thOpen ? (
+                                      <ChevronDown className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <ChevronRight className="w-3.5 h-3.5" />
+                                    )}
+                                  </Button>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span
+                                        className="font-medium text-sm"
+                                        data-testid={`text-spessore-mm-${th.id}`}
+                                      >
+                                        {num(th.thicknessMm)} mm
+                                      </span>
+                                      {!isSingle && (
+                                        <>
+                                          <span
+                                            className="text-xs text-muted-foreground"
+                                            data-testid={`text-spessore-costo-${th.id}`}
+                                          >
+                                            € {formatCurrency(num(th.costPerKg))}/kg
+                                          </span>
+                                          <span
+                                            className="text-xs text-muted-foreground"
+                                            data-testid={`text-spessore-margine-${th.id}`}
+                                          >
+                                            {num(th.marginPercent)}%
+                                          </span>
+                                        </>
+                                      )}
+                                      <span
+                                        className="text-xs text-muted-foreground"
+                                        data-testid={`text-spessore-finitura-${th.id}`}
+                                      >
+                                        · {th.finishes.length} {th.finishes.length === 1 ? "finitura" : "finiture"}
+                                      </span>
+                                    </div>
                                   </div>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs"
+                                    onClick={() => setCreateFinishFor(th)}
+                                    data-testid={`button-aggiungi-finitura-${th.id}`}
+                                  >
+                                    <Plus className="w-3 h-3 mr-1" />
+                                    Finitura
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={() => setEditingThickness({ thickness: th, priceMode: mat.priceMode })}
+                                    data-testid={`button-modifica-spessore-${th.id}`}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={() => setDeletingThickness(th)}
+                                    data-testid={`button-elimina-spessore-${th.id}`}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+
+                                {/* ── Finiture espanse ── */}
+                                {thOpen && (
+                                  <div className="bg-muted/30 border-t">
+                                    {th.finishes.length === 0 ? (
+                                      <div
+                                        className="text-xs text-muted-foreground py-2 px-16"
+                                        data-testid={`empty-finiture-${th.id}`}
+                                      >
+                                        Nessuna finitura inserita.
+                                      </div>
+                                    ) : (
+                                      <div className="divide-y">
+                                        {th.finishes.map((fin) => (
+                                          <div
+                                            key={fin.id}
+                                            className="flex items-center gap-2 px-16 py-1.5"
+                                            data-testid={`row-finitura-${fin.id}`}
+                                          >
+                                            <span
+                                              className="flex-1 text-sm"
+                                              data-testid={`text-finitura-nome-${fin.id}`}
+                                            >
+                                              {fin.name}
+                                            </span>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-6 w-6"
+                                              onClick={() => setEditingFinish(fin)}
+                                              data-testid={`button-modifica-finitura-${fin.id}`}
+                                            >
+                                              <Pencil className="w-3 h-3" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-6 w-6"
+                                              onClick={() => setDeletingFinish(fin)}
+                                              data-testid={`button-elimina-finitura-${fin.id}`}
+                                            >
+                                              <Trash2 className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   )}
@@ -763,8 +934,8 @@ function MaterialiTab() {
             </DialogTitle>
             <DialogDescription>
               {createThicknessFor?.priceMode === "SINGLE"
-                ? "Inserisci spessore e finitura opzionale. Il prezzo è già definito sul materiale."
-                : "Inserisci spessore, finitura, costo al kg e margine %."}
+                ? "Inserisci lo spessore in mm. Il prezzo è già definito sul materiale."
+                : "Inserisci spessore, costo al kg e margine %."}
             </DialogDescription>
           </DialogHeader>
           {createThicknessFor && (
@@ -825,7 +996,7 @@ function MaterialiTab() {
             <AlertDialogTitle>Eliminare lo spessore?</AlertDialogTitle>
             <AlertDialogDescription>
               {deletingThickness
-                ? `Stai per eliminare lo spessore di ${num(deletingThickness.thicknessMm)} mm. L'operazione non è reversibile.`
+                ? `Stai per eliminare lo spessore di ${num(deletingThickness.thicknessMm)} mm e tutte le sue finiture. L'operazione non è reversibile.`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -838,6 +1009,86 @@ function MaterialiTab() {
                 deletingThickness && deleteThicknessMut.mutate(deletingThickness.id)
               }
               data-testid="button-conferma-elimina-spessore"
+            >
+              Elimina
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Crea finitura */}
+      <Dialog
+        open={!!createFinishFor}
+        onOpenChange={(open) => !open && setCreateFinishFor(null)}
+      >
+        <DialogContent data-testid="dialog-nuova-finitura">
+          <DialogHeader>
+            <DialogTitle>
+              Nuova Finitura{createFinishFor ? ` — ${num(createFinishFor.thicknessMm)} mm` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Inserisci il nome della finitura (es. "rosso siena", "RAL 9010").
+            </DialogDescription>
+          </DialogHeader>
+          {createFinishFor && (
+            <FinishForm
+              defaultValues={{ thicknessId: createFinishFor.id, name: "" }}
+              onSubmit={(values) =>
+                createFinishMut.mutate({ thicknessId: createFinishFor.id, data: { name: values.name } })
+              }
+              isPending={createFinishMut.isPending}
+              submitLabel="Aggiungi"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modifica finitura */}
+      <Dialog
+        open={!!editingFinish}
+        onOpenChange={(open) => !open && setEditingFinish(null)}
+      >
+        <DialogContent data-testid="dialog-modifica-finitura">
+          <DialogHeader>
+            <DialogTitle>Modifica Finitura</DialogTitle>
+            <DialogDescription>Aggiorna il nome della finitura.</DialogDescription>
+          </DialogHeader>
+          {editingFinish && (
+            <FinishForm
+              defaultValues={{ thicknessId: editingFinish.thicknessId, name: editingFinish.name }}
+              onSubmit={(values) =>
+                updateFinishMut.mutate({ id: editingFinish.id, data: { name: values.name } })
+              }
+              isPending={updateFinishMut.isPending}
+              submitLabel="Salva"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Elimina finitura */}
+      <AlertDialog
+        open={!!deletingFinish}
+        onOpenChange={(open) => !open && setDeletingFinish(null)}
+      >
+        <AlertDialogContent data-testid="dialog-elimina-finitura">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare la finitura?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deletingFinish
+                ? `Stai per eliminare la finitura "${deletingFinish.name}". L'operazione non è reversibile.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-annulla-elimina-finitura">
+              Annulla
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                deletingFinish && deleteFinishMut.mutate(deletingFinish.id)
+              }
+              data-testid="button-conferma-elimina-finitura"
             >
               Elimina
             </AlertDialogAction>

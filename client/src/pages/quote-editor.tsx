@@ -65,6 +65,8 @@ import {
 import type {
   Material,
   MaterialThickness,
+  MaterialThicknessWithFinishes,
+  MaterialFinish,
   MaterialWithThicknesses,
   ArticleFamilyWithVariants,
   CatalogArticle,
@@ -80,6 +82,7 @@ interface QuoteItemDraft {
   // LATTONERIA
   materialId?: string;
   materialThicknessId?: string;
+  materialFinishId?: string;
   developmentMm?: string;
   // ARTICOLO
   catalogArticleId?: string;
@@ -100,6 +103,7 @@ type QuoteItemPayload =
       marginPercent?: string;
       materialId: string;
       materialThicknessId: string;
+      materialFinishId?: string;
       developmentMm: string;
     }
   | {
@@ -138,6 +142,7 @@ interface QuoteResponse {
     type: QuoteItemType | null;
     materialId: string | null;
     materialThicknessId: string | null;
+    materialFinishId: string | null;
     catalogArticleId: string | null;
     laborRateId: string | null;
     description: string | null;
@@ -164,6 +169,7 @@ function genUid(): string {
 const lattoneriaFormSchema = z.object({
   materialId: z.string().min(1, "Seleziona un materiale"),
   materialThicknessId: z.string().min(1, "Seleziona uno spessore"),
+  materialFinishId: z.string().optional(),
   developmentMm: z.string().refine((v) => parseFloat(v) > 0, { message: "Sviluppo > 0" }),
   quantity: z.string().refine((v) => parseFloat(v) > 0, { message: "Metri > 0" }),
   description: z.string().optional(),
@@ -322,6 +328,7 @@ function LattoneriaForm({
     defaultValues: {
       materialId: initial?.materialId ?? "",
       materialThicknessId: initial?.materialThicknessId ?? "",
+      materialFinishId: initial?.materialFinishId ?? "",
       developmentMm: initial?.developmentMm ?? "",
       quantity: initial?.quantity ?? "",
       description: initial?.description ?? "",
@@ -331,6 +338,7 @@ function LattoneriaForm({
 
   const selectedMaterialId = form.watch("materialId");
   const selectedThicknessId = form.watch("materialThicknessId");
+  const selectedFinishId = form.watch("materialFinishId");
   const developmentMm = form.watch("developmentMm");
   const quantity = form.watch("quantity");
   const marginOverride = form.watch("marginPercent");
@@ -340,19 +348,29 @@ function LattoneriaForm({
     [materials, selectedMaterialId],
   );
   const selectedThickness = useMemo(
-    () => selectedMaterial?.thicknesses?.find((t) => t.id === selectedThicknessId),
+    () => selectedMaterial?.thicknesses?.find((t) => t.id === selectedThicknessId) as MaterialThicknessWithFinishes | undefined,
     [selectedMaterial, selectedThicknessId],
   );
 
   const isSingle = selectedMaterial?.priceMode === "SINGLE";
+  const availableFinishes: MaterialFinish[] = selectedThickness?.finishes ?? [];
 
   // Reset thickness when material changes
   useEffect(() => {
     if (selectedThicknessId && selectedMaterial &&
         !selectedMaterial.thicknesses?.some((t) => t.id === selectedThicknessId)) {
       form.setValue("materialThicknessId", "");
+      form.setValue("materialFinishId", "");
     }
   }, [selectedMaterialId, selectedMaterial, selectedThicknessId, form]);
+
+  // Reset finish when thickness changes
+  useEffect(() => {
+    if (selectedFinishId && selectedThickness &&
+        !selectedThickness.finishes?.some((f) => f.id === selectedFinishId)) {
+      form.setValue("materialFinishId", "");
+    }
+  }, [selectedThicknessId, selectedThickness, selectedFinishId, form]);
 
   const preview = useMemo(() => {
     if (!selectedMaterial || !selectedThickness) return null;
@@ -383,6 +401,7 @@ function LattoneriaForm({
       description: vals.description || "",
       materialId: vals.materialId,
       materialThicknessId: vals.materialThicknessId,
+      materialFinishId: vals.materialFinishId || undefined,
       developmentMm: vals.developmentMm,
       quantity: vals.quantity,
       marginPercent: vals.marginPercent || undefined,
@@ -432,7 +451,7 @@ function LattoneriaForm({
                 </FormControl>
                 <SelectContent>
                   {(selectedMaterial?.thicknesses || []).map((t) => {
-                    const label = `${parseFloat(t.thicknessMm)} mm${t.finish ? " " + t.finish : ""}`;
+                    const label = `${parseFloat(t.thicknessMm)} mm`;
                     const priceSuffix = !isSingle && t.costPerKg
                       ? ` — ${parseFloat(String(t.costPerKg)).toFixed(2)} €/kg`
                       : "";
@@ -448,6 +467,38 @@ function LattoneriaForm({
             </FormItem>
           )}
         />
+        {availableFinishes.length > 0 && (
+          <FormField
+            control={form.control}
+            name="materialFinishId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Finitura (opzionale)</FormLabel>
+                <Select
+                  value={field.value ?? "__NONE__"}
+                  onValueChange={(v) => field.onChange(v === "__NONE__" ? "" : v)}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="select-finish">
+                      <SelectValue placeholder="Nessuna finitura" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="__NONE__" data-testid="option-finish-none">
+                      — Nessuna finitura —
+                    </SelectItem>
+                    {availableFinishes.map((f) => (
+                      <SelectItem key={f.id} value={f.id} data-testid={`option-finish-${f.id}`}>
+                        {f.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
         <div className="grid grid-cols-2 gap-3">
           <FormField
             control={form.control}
@@ -926,6 +977,7 @@ export default function QuoteEditorPage() {
           description: i.description || "",
           materialId: i.materialId || undefined,
           materialThicknessId: i.materialThicknessId || undefined,
+          materialFinishId: i.materialFinishId || undefined,
           developmentMm: i.developmentMm || undefined,
           catalogArticleId: i.catalogArticleId || undefined,
           laborRateId: i.laborRateId || undefined,
@@ -966,6 +1018,7 @@ export default function QuoteEditorPage() {
             marginPercent: margin,
             materialId: it.materialId ?? "",
             materialThicknessId: it.materialThicknessId ?? "",
+            materialFinishId: it.materialFinishId || undefined,
             developmentMm: it.developmentMm ?? "",
           };
         }
@@ -1068,9 +1121,10 @@ export default function QuoteEditorPage() {
   function rowDetails(it: QuoteItemDraft): string {
     if (it.type === "LATTONERIA") {
       const m = materialsQuery.data?.find((x) => x.id === it.materialId);
-      const t = m?.thicknesses?.find((x) => x.id === it.materialThicknessId);
+      const t = m?.thicknesses?.find((x) => x.id === it.materialThicknessId) as MaterialThicknessWithFinishes | undefined;
+      const f = it.materialFinishId ? t?.finishes?.find((x) => x.id === it.materialFinishId) : undefined;
       const desc = it.description ||
-        (m && t ? `${m.name} ${parseFloat(t.thicknessMm)}mm` : "Lattoneria");
+        (m && t ? `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}` : "Lattoneria");
       return `${desc} — sviluppo ${it.developmentMm || "?"}mm × ${it.quantity} ml`;
     }
     if (it.type === "ARTICOLO") {
