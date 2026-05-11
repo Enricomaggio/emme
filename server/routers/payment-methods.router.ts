@@ -1,13 +1,10 @@
 import { Router } from "express";
 import { storage } from "../storage";
-import { isAuthenticated } from "../auth";
+import { isAuthenticated, requireRole } from "../auth";
 import { resolveUserCompany } from "../utils/accessContext";
 import { insertPaymentMethodSchema } from "@shared/schema";
-import type { UserRole } from "@shared/schema";
 
 export const paymentMethodsRouter = Router();
-
-const ALLOWED_WRITE_ROLES: UserRole[] = ["SUPER_ADMIN", "COMPANY_ADMIN", "SALES_AGENT"];
 
 // GET /api/payment-methods - Lista tutte le modalità di pagamento dell'azienda
 paymentMethodsRouter.get("/payment-methods", isAuthenticated, async (req, res) => {
@@ -27,12 +24,9 @@ paymentMethodsRouter.get("/payment-methods", isAuthenticated, async (req, res) =
 });
 
 // POST /api/payment-methods - Crea una nuova modalità di pagamento
-paymentMethodsRouter.post("/payment-methods", isAuthenticated, async (req, res) => {
+paymentMethodsRouter.post("/payment-methods", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
-    if (!ALLOWED_WRITE_ROLES.includes(role)) {
-      return res.status(403).json({ message: "Non autorizzato" });
-    }
     const userCompany = await resolveUserCompany(userId, role, req);
     if (!userCompany) {
       return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
@@ -52,12 +46,9 @@ paymentMethodsRouter.post("/payment-methods", isAuthenticated, async (req, res) 
 });
 
 // PATCH /api/payment-methods/:id - Aggiorna una modalità di pagamento
-paymentMethodsRouter.patch("/payment-methods/:id", isAuthenticated, async (req, res) => {
+paymentMethodsRouter.patch("/payment-methods/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
-    if (!ALLOWED_WRITE_ROLES.includes(role)) {
-      return res.status(403).json({ message: "Non autorizzato" });
-    }
     const userCompany = await resolveUserCompany(userId, role, req);
     if (!userCompany) {
       return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
@@ -81,12 +72,9 @@ paymentMethodsRouter.patch("/payment-methods/:id", isAuthenticated, async (req, 
 });
 
 // DELETE /api/payment-methods/:id - Elimina una modalità di pagamento
-paymentMethodsRouter.delete("/payment-methods/:id", isAuthenticated, async (req, res) => {
+paymentMethodsRouter.delete("/payment-methods/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
-    if (!ALLOWED_WRITE_ROLES.includes(role)) {
-      return res.status(403).json({ message: "Non autorizzato" });
-    }
     const userCompany = await resolveUserCompany(userId, role, req);
     if (!userCompany) {
       return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
