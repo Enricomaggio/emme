@@ -18,6 +18,8 @@ import {
   Pencil,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { QuotePdfActions } from "@/pdf/QuotePdfActions";
+import type { PdfQuote } from "@/pdf/quote-pdf-utils";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1118,6 +1120,54 @@ export default function QuoteEditorPage() {
     return <Badge className={v.cls} variant="secondary" data-testid={`badge-row-type-${type}`}>{v.label}</Badge>;
   }
 
+  function rowDetailsForItem(it: QuoteResponse["items"][number]): string {
+    if (it.type === "LATTONERIA") {
+      const m = materialsQuery.data?.find((x) => x.id === it.materialId);
+      const t = m?.thicknesses?.find((x) => x.id === it.materialThicknessId) as
+        | MaterialThicknessWithFinishes
+        | undefined;
+      const f = it.materialFinishId ? t?.finishes?.find((x) => x.id === it.materialFinishId) : undefined;
+      if (m && t) {
+        return `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}`;
+      }
+      return it.description || "Lattoneria";
+    }
+    if (it.type === "ARTICOLO") {
+      for (const fam of (articleFamiliesQuery.data ?? [])) {
+        const v = fam.variants.find((x) => x.id === it.catalogArticleId);
+        if (v) return `${fam.name} – ${v.name}`;
+      }
+      return it.description || "Articolo";
+    }
+    const l = laborRatesQuery.data?.find((x) => x.id === it.laborRateId);
+    return it.description || l?.name || "Manodopera";
+  }
+
+  function buildPdfQuote(q: QuoteResponse): PdfQuote {
+    return {
+      id: q.id,
+      number: q.number,
+      subject: q.subject,
+      notes: q.notes,
+      totalAmount: q.totalAmount,
+      createdAt: q.createdAt,
+      items: q.items
+        .slice()
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map((it) => ({
+          id: it.id,
+          type: it.type,
+          description: it.description,
+          unitOfMeasure: it.unitOfMeasure,
+          developmentMm: it.developmentMm,
+          quantity: it.quantity,
+          unitPriceApplied: it.unitPriceApplied,
+          totalRow: it.totalRow,
+          displayOrder: it.displayOrder,
+        })),
+    };
+  }
+
   function rowDetails(it: QuoteItemDraft): string {
     if (it.type === "LATTONERIA") {
       const m = materialsQuery.data?.find((x) => x.id === it.materialId);
@@ -1161,18 +1211,32 @@ export default function QuoteEditorPage() {
             </div>
           )}
         </div>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending || isLoading}
-          data-testid="button-save-quote"
-        >
-          {saveMutation.isPending ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4 mr-2" />
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending || isLoading}
+            data-testid="button-save-quote"
+          >
+            {saveMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
+            Salva preventivo
+          </Button>
+          {!isNew && quoteQuery.data && (
+            <QuotePdfActions
+              quote={buildPdfQuote(quoteQuery.data)}
+              opportunity={opportunityQuery.data ?? null}
+              resolveItemName={(id) => {
+                const it = quoteQuery.data!.items.find((x) => x.id === id);
+                if (!it) return undefined;
+                return rowDetailsForItem(it);
+              }}
+              disabled={saveMutation.isPending}
+            />
           )}
-          Salva preventivo
-        </Button>
+        </div>
       </div>
 
       {loadError && (

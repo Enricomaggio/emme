@@ -1019,6 +1019,7 @@ export default function SettingsPage() {
   const { user, logout, updateUser } = useAuth();
   const { toast } = useToast();
   const isAdmin = user?.role === "COMPANY_ADMIN" || user?.role === "SUPER_ADMIN";
+  const isCompanyAdmin = user?.role === "COMPANY_ADMIN";
 
   const userInitials = user?.firstName && user?.lastName 
     ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
@@ -1053,6 +1054,18 @@ export default function SettingsPage() {
     fiscalCode: "",
     shareCapital: "",
     iban: "",
+    logoUrl: "",
+    pecEmail: "",
+    website: "",
+    rea: "",
+    bankName: "",
+    bankHolder: "",
+    bankSwift: "",
+    quotePaymentTerms: "",
+    quoteValidityDays: "30",
+    quoteFooterNotes: "",
+    emailSubjectTemplate: "",
+    emailBodyTemplate: "",
   });
 
   useEffect(() => {
@@ -1066,13 +1079,25 @@ export default function SettingsPage() {
         fiscalCode: company.fiscalCode || "",
         shareCapital: company.shareCapital || "",
         iban: company.iban || "",
+        logoUrl: company.logoUrl || "",
+        pecEmail: company.pecEmail || "",
+        website: company.website || "",
+        rea: company.rea || "",
+        bankName: company.bankName || "",
+        bankHolder: company.bankHolder || "",
+        bankSwift: company.bankSwift || "",
+        quotePaymentTerms: company.quotePaymentTerms || "",
+        quoteValidityDays: String(company.quoteValidityDays ?? 30),
+        quoteFooterNotes: company.quoteFooterNotes || "",
+        emailSubjectTemplate: company.emailSubjectTemplate || "",
+        emailBodyTemplate: company.emailBodyTemplate || "",
       });
     }
   }, [company]);
 
   const updateCompanyMutation = useMutation({
     mutationFn: async (data: typeof companyForm) => {
-      const response = await apiRequest("PATCH", "/api/company", data);
+      const response = await apiRequest("PUT", "/api/company", data);
       return response.json();
     },
     onSuccess: () => {
@@ -1425,7 +1450,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {isAdmin && (
+        {isCompanyAdmin && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -1552,6 +1577,186 @@ export default function SettingsPage() {
                       onChange={(e) => handleCompanyChange("iban", e.target.value)}
                       placeholder="IT00A0000000000000000000000"
                       
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t space-y-2">
+                  <Label htmlFor="company-logo-url">URL Logo (per PDF preventivo)</Label>
+                  <Input
+                    id="company-logo-url"
+                    data-testid="input-company-logo-url"
+                    value={companyForm.logoUrl}
+                    onChange={(e) => handleCompanyChange("logoUrl", e.target.value)}
+                    placeholder="https://.../logo.png"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Inserisci l'URL del logo aziendale. Apparirà nell'intestazione del preventivo PDF.
+                  </p>
+                  {companyForm.logoUrl && (
+                    <img
+                      src={companyForm.logoUrl}
+                      alt="Anteprima logo"
+                      className="h-16 w-auto mt-2 border rounded bg-white p-1"
+                      data-testid="img-company-logo-preview"
+                    />
+                  )}
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="company-pec">PEC</Label>
+                    <Input
+                      id="company-pec"
+                      type="email"
+                      data-testid="input-company-pec"
+                      value={companyForm.pecEmail}
+                      onChange={(e) => handleCompanyChange("pecEmail", e.target.value)}
+                      placeholder="azienda@pec.it"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="company-website">Sito Web</Label>
+                    <Input
+                      id="company-website"
+                      data-testid="input-company-website"
+                      value={companyForm.website}
+                      onChange={(e) => handleCompanyChange("website", e.target.value)}
+                      placeholder="www.azienda.it"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="company-rea">REA</Label>
+                    <Input
+                      id="company-rea"
+                      data-testid="input-company-rea"
+                      value={companyForm.rea}
+                      onChange={(e) => handleCompanyChange("rea", e.target.value)}
+                      placeholder="VE-123456"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t space-y-4">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Dati Bancari
+                  </h3>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="company-bank-name">Banca</Label>
+                      <Input
+                        id="company-bank-name"
+                        data-testid="input-company-bank-name"
+                        value={companyForm.bankName}
+                        onChange={(e) => handleCompanyChange("bankName", e.target.value)}
+                        placeholder="Es. Intesa Sanpaolo"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="company-bank-holder">Intestatario</Label>
+                      <Input
+                        id="company-bank-holder"
+                        data-testid="input-company-bank-holder"
+                        value={companyForm.bankHolder}
+                        onChange={(e) => handleCompanyChange("bankHolder", e.target.value)}
+                        placeholder="Es. GDM Lattonerie s.r.l."
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="company-bank-swift">SWIFT / BIC</Label>
+                      <Input
+                        id="company-bank-swift"
+                        data-testid="input-company-bank-swift"
+                        value={companyForm.bankSwift}
+                        onChange={(e) => handleCompanyChange("bankSwift", e.target.value)}
+                        placeholder="BCITITMM"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t space-y-4">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Preferenze Preventivo
+                  </h3>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="company-validity">Validità preventivo (giorni)</Label>
+                      <Input
+                        id="company-validity"
+                        type="number"
+                        min={1}
+                        max={365}
+                        data-testid="input-company-validity-days"
+                        value={companyForm.quoteValidityDays}
+                        onChange={(e) =>
+                          handleCompanyChange("quoteValidityDays", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="company-payment-terms">Modalità di pagamento</Label>
+                      <Input
+                        id="company-payment-terms"
+                        data-testid="input-company-payment-terms"
+                        value={companyForm.quotePaymentTerms}
+                        onChange={(e) =>
+                          handleCompanyChange("quotePaymentTerms", e.target.value)
+                        }
+                        placeholder="Bonifico bancario a 30 gg fine mese"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="company-footer-notes">Note in fondo al PDF</Label>
+                    <Textarea
+                      id="company-footer-notes"
+                      data-testid="input-company-footer-notes"
+                      value={companyForm.quoteFooterNotes}
+                      onChange={(e) =>
+                        handleCompanyChange("quoteFooterNotes", e.target.value)
+                      }
+                      rows={2}
+                      placeholder="Testo libero che appare in fondo a ogni pagina del PDF preventivo"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t space-y-4">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Template Email
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Placeholder disponibili: <code>{`{numero}`}</code>, <code>{`{cliente}`}</code>,{" "}
+                    <code>{`{oggetto}`}</code>, <code>{`{totale}`}</code>
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="company-email-subject">Oggetto email</Label>
+                    <Input
+                      id="company-email-subject"
+                      data-testid="input-company-email-subject"
+                      value={companyForm.emailSubjectTemplate}
+                      onChange={(e) =>
+                        handleCompanyChange("emailSubjectTemplate", e.target.value)
+                      }
+                      placeholder="Preventivo {numero} — GDM Lattonerie"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="company-email-body">Corpo email</Label>
+                    <Textarea
+                      id="company-email-body"
+                      data-testid="input-company-email-body"
+                      value={companyForm.emailBodyTemplate}
+                      onChange={(e) =>
+                        handleCompanyChange("emailBodyTemplate", e.target.value)
+                      }
+                      rows={6}
+                      placeholder={"Buongiorno,\n\nin allegato trovate il preventivo {numero}..."}
                     />
                   </div>
                 </div>

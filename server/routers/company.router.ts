@@ -259,14 +259,15 @@ companyRouter.get("/company", isAuthenticated, async (req: any, res) => {
   }
 });
 
-// PATCH /api/company - Aggiorna impostazioni azienda (nome, logo, P.IVA, IBAN…)
-companyRouter.patch("/company", isAuthenticated, async (req: any, res) => {
+// PUT /api/company - Aggiorna impostazioni azienda (nome, logo, P.IVA, IBAN…)
+// NB: PATCH /api/company è mantenuto come alias per retrocompatibilità.
+const updateCompanyHandler = async (req: any, res: any) => {
   try {
     const userId = req.user!.id;
     const role = req.user!.role;
 
-    // Solo COMPANY_ADMIN e SUPER_ADMIN possono modificare i dati azienda
-    if (role !== "SUPER_ADMIN" && role !== "COMPANY_ADMIN") {
+    // Solo COMPANY_ADMIN può modificare i dati azienda
+    if (role !== "COMPANY_ADMIN") {
       return res.status(403).json({ message: "Accesso negato. Solo gli amministratori possono modificare i dati aziendali." });
     }
 
@@ -285,6 +286,18 @@ companyRouter.patch("/company", isAuthenticated, async (req: any, res) => {
       shareCapital: z.string().optional(),
       iban: z.string().optional(),
       logoUrl: z.string().optional(),
+      // Campi aggiuntivi per PDF preventivo
+      pecEmail: z.string().email().optional().or(z.literal("")),
+      website: z.string().optional(),
+      rea: z.string().optional(),
+      bankName: z.string().optional(),
+      bankHolder: z.string().optional(),
+      bankSwift: z.string().optional(),
+      quotePaymentTerms: z.string().optional(),
+      quoteValidityDays: z.coerce.number().int().min(1).max(365).optional(),
+      quoteFooterNotes: z.string().optional(),
+      emailSubjectTemplate: z.string().optional(),
+      emailBodyTemplate: z.string().optional(),
     });
 
     const validatedData = updateCompanySchema.parse(req.body);
@@ -296,6 +309,8 @@ companyRouter.patch("/company", isAuthenticated, async (req: any, res) => {
         updateData[key] = value === "" ? null : value;
       }
     }
+    // quoteValidityDays è numerico: lo convertiamo da stringa se necessario è già fatto dal coerce
+
 
     const company = await storage.updateCompany(userCompany.companyId, updateData);
 
@@ -311,7 +326,10 @@ companyRouter.patch("/company", isAuthenticated, async (req: any, res) => {
     console.error("Error updating company:", error);
     res.status(500).json({ message: "Errore nell'aggiornamento dell'azienda" });
   }
-});
+};
+
+companyRouter.put("/company", isAuthenticated, updateCompanyHandler);
+companyRouter.patch("/company", isAuthenticated, updateCompanyHandler);
 
 // ============================================
 // BILLING PROFILES — /api/billing-profiles

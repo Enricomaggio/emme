@@ -19,6 +19,18 @@ export const companies = pgTable("companies", {
   shareCapital: text("share_capital"),
   iban: text("iban"),
   logoUrl: text("logo_url"),
+  // Campi aggiuntivi per il PDF preventivo
+  pecEmail: text("pec_email"),
+  website: text("website"),
+  rea: text("rea"),
+  bankName: text("bank_name"),
+  bankHolder: text("bank_holder"),
+  bankSwift: text("bank_swift"),
+  quotePaymentTerms: text("quote_payment_terms"),
+  quoteValidityDays: integer("quote_validity_days").default(30),
+  quoteFooterNotes: text("quote_footer_notes"),
+  emailSubjectTemplate: text("email_subject_template"),
+  emailBodyTemplate: text("email_body_template"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
