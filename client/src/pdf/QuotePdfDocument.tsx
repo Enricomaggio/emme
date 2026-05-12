@@ -145,6 +145,19 @@ const styles = StyleSheet.create({
   colQty: { flex: 1.2, textAlign: "right" },
   colUnit: { flex: 1.4, textAlign: "right" },
   colTotal: { flex: 1.4, textAlign: "right", fontFamily: "Helvetica-Bold" },
+  priceOriginal: {
+    fontSize: 7.5,
+    color: "#9ca3af",
+    textDecoration: "line-through",
+    textAlign: "right",
+    fontFamily: "Helvetica",
+  },
+  descBadge: {
+    fontSize: 7,
+    color: "#d97706",
+    fontFamily: "Helvetica-Bold",
+    marginTop: 2,
+  },
   totalsBlock: {
     alignSelf: "flex-end",
     width: "55%",
@@ -337,18 +350,39 @@ export const QuotePdfDocument = ({ company, customer, quote, opportunityTitle, p
               <Text style={[styles.col, styles.colTotal]}>—</Text>
             </View>
           ) : (
-            quote.items.map((item, i) => (
-              <View
-                key={item.id}
-                style={[styles.tableRow, i % 2 === 0 ? styles.tableRowAlt : {}]}
-                wrap={false}
-              >
-                <Text style={[styles.col, styles.colDesc]}>{buildItemDescription(item)}</Text>
-                <Text style={[styles.col, styles.colQty]}>{formatQty(item)}</Text>
-                <Text style={[styles.col, styles.colUnit]}>€ {fmt(item.unitPriceApplied)}</Text>
-                <Text style={[styles.col, styles.colTotal]}>€ {fmt(item.totalRow)}</Text>
-              </View>
-            ))
+            quote.items.map((item, i) => {
+              const discountPct = parseFloat(item.discountPercent || "0") || 0;
+              const hasDiscount = discountPct > 0 && !item.overrideTotal;
+              const hasOverride = item.overrideTotal != null && item.overrideTotal !== "";
+              const _baseParsed = parseFloat(item.baseTotal || "");
+              const baseTotalNum = Number.isFinite(_baseParsed) ? _baseParsed : null;
+
+              return (
+                <View
+                  key={item.id}
+                  style={[styles.tableRow, i % 2 === 0 ? styles.tableRowAlt : {}]}
+                  wrap={false}
+                >
+                  <View style={[styles.col, styles.colDesc]}>
+                    <Text>{buildItemDescription(item)}</Text>
+                    {hasOverride && (
+                      <Text style={styles.descBadge}>manuale</Text>
+                    )}
+                    {hasDiscount && (
+                      <Text style={styles.descBadge}>-{discountPct.toFixed(1)}%</Text>
+                    )}
+                  </View>
+                  <Text style={[styles.col, styles.colQty]}>{formatQty(item)}</Text>
+                  <Text style={[styles.col, styles.colUnit]}>€ {fmt(item.unitPriceApplied)}</Text>
+                  <View style={[styles.col, styles.colTotal]}>
+                    {(hasDiscount || hasOverride) && baseTotalNum != null ? (
+                      <Text style={styles.priceOriginal}>€ {fmt(baseTotalNum)}</Text>
+                    ) : null}
+                    <Text style={{ textAlign: "right", fontFamily: "Helvetica-Bold" }}>€ {fmt(item.totalRow)}</Text>
+                  </View>
+                </View>
+              );
+            })
           )}
         </View>
 

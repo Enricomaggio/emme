@@ -1617,6 +1617,9 @@ export default function QuoteEditorPage() {
           unitPriceApplied: it.unitPriceApplied,
           totalRow: it.totalRow,
           displayOrder: it.displayOrder,
+          discountPercent: it.discountPercent ?? null,
+          overrideTotal: it.overrideTotal ?? null,
+          baseTotal: it.baseTotal ?? null,
         })),
     };
   }

@@ -10,6 +10,10 @@ export interface PdfQuoteItem {
   unitPriceApplied: string;
   totalRow: string;
   displayOrder: number;
+  // Discount / override pricing
+  discountPercent?: string | null;
+  overrideTotal?: string | null;
+  baseTotal?: string | null;
   // Snapshot names from related catalog data (resolved at PDF time)
   resolvedName?: string;
 }
