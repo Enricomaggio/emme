@@ -73,10 +73,17 @@ interface SiteOpportunity {
   permessoSosta?: string | null;
 }
 
+interface SiteQuoteDiscounts {
+  globalDiscountMode?: "percent" | "euro";
+  globalDiscountPercent?: number;
+  globalDiscountAmount?: number;
+}
+
 interface SiteQuote {
   id: string;
   number?: string | null;
   totalAmount?: string | number | null;
+  discounts?: SiteQuoteDiscounts | null;
   globalParams?: {
     durationMonths?: number | null;
     distanceKm?: number | null;
@@ -84,6 +91,24 @@ interface SiteQuote {
   pdfData?: {
     quote?: { quoteMode?: string } | null;
   } | null;
+}
+
+function applyGlobalDiscount(
+  totalAmount: string | number | null | undefined,
+  discounts: SiteQuoteDiscounts | null | undefined,
+): { discountedTotal: number; discountValue: number; discountMode: "percent" | "euro" | null } {
+  const subtotal = parseFloat(String(totalAmount || "0")) || 0;
+  const mode = discounts?.globalDiscountMode;
+  const pct = discounts?.globalDiscountPercent;
+  const amt = discounts?.globalDiscountAmount;
+  if (mode === "percent" && pct && pct > 0) {
+    const da = Math.min((subtotal * Math.min(pct, 100)) / 100, subtotal);
+    return { discountedTotal: Math.max(0, subtotal - da), discountValue: pct, discountMode: "percent" };
+  } else if (mode === "euro" && amt && amt > 0) {
+    const da = Math.min(amt, subtotal);
+    return { discountedTotal: Math.max(0, subtotal - da), discountValue: amt, discountMode: "euro" };
+  }
+  return { discountedTotal: subtotal, discountValue: 0, discountMode: null };
 }
 
 interface SiteQuoteItem {
@@ -535,11 +560,21 @@ export function SchedaCantiereModal({
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-medium">{quote.number || "Preventivo"}</span>
                       </div>
-                      {quote.totalAmount && (
-                        <span className="text-sm font-bold text-primary" data-testid="scheda-quote-total">
-                          {formatCurrency(quote.totalAmount)}
-                        </span>
-                      )}
+                      {quote.totalAmount && (() => {
+                        const { discountedTotal, discountValue, discountMode } = applyGlobalDiscount(quote.totalAmount, quote.discounts);
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            {discountMode && (
+                              <span className="text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded" data-testid="scheda-quote-discount-badge">
+                                -{discountMode === "percent" ? `${discountValue}%` : formatCurrency(discountValue)}
+                              </span>
+                            )}
+                            <span className="text-sm font-bold text-primary" data-testid="scheda-quote-total">
+                              {formatCurrency(discountedTotal)}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="mb-2">
                       <InfoRow label="Tipo preventivo" value={quoteModeLabels[quoteMode]} />

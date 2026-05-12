@@ -64,7 +64,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ReminderModal } from "@/components/reminder-modal";
 import { formatCurrency } from "@/lib/formatCurrency";
-import type { Opportunity, Lead, PipelineStage, ContactReferent, LostReason, SiteQuality, QuoteStatus, Worker } from "@shared/schema";
+import type { Opportunity, Lead, PipelineStage, ContactReferent, LostReason, SiteQuality, QuoteStatus, Worker, QuoteDiscounts } from "@shared/schema";
 import { lostReasonEnum, siteQualityEnum } from "@shared/schema";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -128,6 +128,25 @@ interface Quote {
   status: QuoteStatus;
   totalAmount: string;
   createdAt: string;
+  discounts?: QuoteDiscounts | null;
+}
+
+function applyGlobalDiscount(
+  totalAmount: string | number | null | undefined,
+  discounts: QuoteDiscounts | null | undefined,
+): { discountedTotal: number; discountValue: number; discountMode: "percent" | "euro" | null } {
+  const subtotal = parseFloat(String(totalAmount || "0")) || 0;
+  const mode = discounts?.globalDiscountMode;
+  const pct = discounts?.globalDiscountPercent;
+  const amt = discounts?.globalDiscountAmount;
+  if (mode === "percent" && pct && pct > 0) {
+    const da = Math.min((subtotal * Math.min(pct, 100)) / 100, subtotal);
+    return { discountedTotal: Math.max(0, subtotal - da), discountValue: pct, discountMode: "percent" };
+  } else if (mode === "euro" && amt && amt > 0) {
+    const da = Math.min(amt, subtotal);
+    return { discountedTotal: Math.max(0, subtotal - da), discountValue: amt, discountMode: "euro" };
+  }
+  return { discountedTotal: subtotal, discountValue: 0, discountMode: null };
 }
 
 const quoteStatusConfig: Record<QuoteStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -428,11 +447,21 @@ function OpportunitySchedaCantiereModal({
                           <Eye className="w-3.5 h-3.5" />
                         </a>
                       </div>
-                      {quote.totalAmount && (
-                        <span className="text-sm font-bold text-primary" data-testid="scheda-quote-total">
-                          {fmtCurrency(quote.totalAmount)}
-                        </span>
-                      )}
+                      {quote.totalAmount && (() => {
+                        const { discountedTotal, discountValue, discountMode } = applyGlobalDiscount(quote.totalAmount, quote.discounts);
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            {discountMode && (
+                              <span className="text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded" data-testid="scheda-quote-discount-badge">
+                                -{discountMode === "percent" ? `${discountValue}%` : `€${formatCurrency(discountValue)}`}
+                              </span>
+                            )}
+                            <span className="text-sm font-bold text-primary" data-testid="scheda-quote-total">
+                              {fmtCurrency(discountedTotal)}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="mb-2">
                       <SchedaInfoRow label="Tipo preventivo" value={quoteModeLabels[quoteMode]} />
@@ -2883,9 +2912,21 @@ export default function OpportunitaPage() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
-                                <div className="font-semibold text-xs">
-                                  €{formatCurrency(parseFloat(quote.totalAmount || "0"))}
-                                </div>
+                                {(() => {
+                                  const { discountedTotal, discountValue, discountMode } = applyGlobalDiscount(quote.totalAmount, quote.discounts);
+                                  return (
+                                    <>
+                                      {discountMode && (
+                                        <span className="text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded" data-testid={`quote-discount-badge-${quote.id}`}>
+                                          -{discountMode === "percent" ? `${discountValue}%` : `€${formatCurrency(discountValue)}`}
+                                        </span>
+                                      )}
+                                      <div className="font-semibold text-xs" data-testid={`quote-total-${quote.id}`}>
+                                        €{formatCurrency(discountedTotal)}
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                                 <Button
                                   type="button"
                                   variant="ghost"
