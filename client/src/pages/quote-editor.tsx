@@ -97,6 +97,9 @@ interface QuoteItemDraft {
   // For display only — frozen on saved items
   unitOfMeasure?: string | null;
   totalRow?: string | null;
+  // Cost/margin data for live summary panel
+  costRow?: string | null;
+  effectiveMargin?: string | null;
 }
 
 type QuoteItemPayload =
@@ -441,6 +444,8 @@ function LattoneriaForm({
       marginPercent: vals.marginPercent || undefined,
       unitOfMeasure: "ml",
       totalRow: preview ? preview.total.toFixed(2) : null,
+      costRow: preview ? preview.cost.toFixed(2) : null,
+      effectiveMargin: preview ? preview.margin.toFixed(4) : null,
     });
   });
 
@@ -690,6 +695,8 @@ function ArticoloForm({
       marginPercent: vals.marginPercent || undefined,
       unitOfMeasure: selectedVariant?.unitOfMeasure ?? selectedFamily?.unitOfMeasure ?? "pz",
       totalRow: preview ? preview.total.toFixed(2) : null,
+      costRow: preview ? preview.cost.toFixed(2) : null,
+      effectiveMargin: preview ? preview.margin.toFixed(4) : null,
     });
   });
 
@@ -856,6 +863,8 @@ function GiornateForm({
       marginPercent: vals.marginPercent || undefined,
       unitOfMeasure: "gg",
       totalRow: preview ? preview.total.toFixed(2) : null,
+      costRow: preview ? preview.cost.toFixed(2) : null,
+      effectiveMargin: preview ? preview.margin.toFixed(4) : null,
     });
   });
 
@@ -989,6 +998,7 @@ function ManualeForm({
   }, [quantity, unitCost, marginPercent]);
 
   const submit = form.handleSubmit((vals) => {
+    const cost = preview ? (parseFloat(vals.unitCost) * parseFloat(vals.quantity)) : null;
     onSubmit({
       type: "MANUALE",
       description: vals.description,
@@ -997,6 +1007,8 @@ function ManualeForm({
       unitCost: vals.unitCost,
       marginPercent: vals.marginPercent || undefined,
       totalRow: preview ? preview.total.toFixed(2) : null,
+      costRow: cost !== null ? cost.toFixed(2) : null,
+      effectiveMargin: preview ? preview.margin.toFixed(4) : null,
     });
   });
 
@@ -1146,22 +1158,41 @@ export default function QuoteEditorPage() {
       (q.items || [])
         .slice()
         .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-        .map((i) => ({
-          uid: i.id,
-          type: (i.type ?? "ARTICOLO") as QuoteItemType,
-          description: i.description || "",
-          materialId: i.materialId || undefined,
-          materialThicknessId: i.materialThicknessId || undefined,
-          materialFinishId: i.materialFinishId || undefined,
-          developmentMm: i.developmentMm || undefined,
-          catalogArticleId: i.catalogArticleId || undefined,
-          laborRateId: i.laborRateId || undefined,
-          unitCost: i.type === "MANUALE" ? (i.unitCost || "0") : undefined,
-          quantity: i.quantity,
-          marginPercent: i.marginPercent || undefined,
-          unitOfMeasure: i.unitOfMeasure,
-          totalRow: i.totalRow,
-        })),
+        .map((i) => {
+          const qty = parseFloat(i.quantity);
+          const unitCostVal = parseFloat(i.unitCost || "0");
+          const marginPct = parseFloat(i.marginPercent || "0");
+          const totalRowVal = parseFloat(i.totalRow);
+          // Derive costRow from saved data.
+          // For ARTICOLO, GIORNATE, MANUALE: unitCost is per unit of quantity, so cost = unitCost * qty.
+          // For LATTONERIA: unitCost is stored as €/kg (incompatible with ml quantity), so always use
+          // the reverse-margin formula: cost = totalRow / (1 + marginPercent/100).
+          let costRow: string | null = null;
+          const canUseUnitCost = i.type !== "LATTONERIA" && i.unitCost && isFinite(unitCostVal) && isFinite(qty);
+          if (canUseUnitCost) {
+            costRow = (unitCostVal * qty).toFixed(2);
+          } else if (isFinite(totalRowVal) && isFinite(marginPct) && marginPct >= 0) {
+            costRow = (totalRowVal / (1 + marginPct / 100)).toFixed(2);
+          }
+          return {
+            uid: i.id,
+            type: (i.type ?? "ARTICOLO") as QuoteItemType,
+            description: i.description || "",
+            materialId: i.materialId || undefined,
+            materialThicknessId: i.materialThicknessId || undefined,
+            materialFinishId: i.materialFinishId || undefined,
+            developmentMm: i.developmentMm || undefined,
+            catalogArticleId: i.catalogArticleId || undefined,
+            laborRateId: i.laborRateId || undefined,
+            unitCost: i.type === "MANUALE" ? (i.unitCost || "0") : undefined,
+            quantity: i.quantity,
+            marginPercent: i.marginPercent || undefined,
+            unitOfMeasure: i.unitOfMeasure,
+            totalRow: i.totalRow,
+            costRow,
+            effectiveMargin: i.marginPercent || null,
+          };
+        }),
     );
   }, [quoteQuery.data]);
 
@@ -1175,6 +1206,33 @@ export default function QuoteEditorPage() {
   const totalEstimated = useMemo(() => {
     return items.reduce((sum, it) => sum + parseFloat(it.totalRow || "0"), 0);
   }, [items]);
+
+  const quoteSummary = useMemo(() => {
+    let totalCost = 0;
+    const marginGroups = new Map<number, { count: number; revenue: number; cost: number }>();
+
+    for (const it of items) {
+      const revenue = parseFloat(it.totalRow || "0");
+      const cost = parseFloat(it.costRow || "0");
+      const margin = parseFloat(it.effectiveMargin || "0");
+      const marginKey = Math.round((isFinite(margin) ? margin : 0) * 10) / 10;
+
+      totalCost += isFinite(cost) ? cost : 0;
+
+      const group = marginGroups.get(marginKey) ?? { count: 0, revenue: 0, cost: 0 };
+      group.count++;
+      group.revenue += isFinite(revenue) ? revenue : 0;
+      group.cost += isFinite(cost) ? cost : 0;
+      marginGroups.set(marginKey, group);
+    }
+
+    const totalMarginEur = totalEstimated - totalCost;
+    const distinctMargins = Array.from(marginGroups.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([percent, { count, revenue, cost }]) => ({ percent, count, revenue, cost }));
+
+    return { totalCost, totalMarginEur, distinctMargins };
+  }, [items, totalEstimated]);
 
   function buildPayload(): QuoteSavePayload {
     return {
@@ -1586,14 +1644,48 @@ export default function QuoteEditorPage() {
                   </TableBody>
                 </Table>
               )}
-              <div className="flex justify-end mt-4 pt-3 border-t">
-                <div className="text-right">
-                  <div className="text-xs text-muted-foreground">Totale stimato</div>
-                  <div className="text-2xl font-semibold" data-testid="text-total">
-                    € {formatEur(totalEstimated)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    I prezzi vengono ricalcolati e congelati al salvataggio
+              <div className="mt-4 pt-3 border-t" data-testid="quote-summary-panel">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  {items.length > 0 && (
+                    <div className="text-sm space-y-1" data-testid="quote-cost-summary">
+                      <div className="flex items-center gap-6">
+                        <span className="text-muted-foreground w-28">Costo totale</span>
+                        <span className="font-semibold">€ {formatEur(quoteSummary.totalCost)}</span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <span className="text-muted-foreground w-28">Margine €</span>
+                        <span className="font-semibold">€ {formatEur(quoteSummary.totalMarginEur)}</span>
+                      </div>
+                      {quoteSummary.distinctMargins.length === 1 ? (
+                        <div className="flex items-center gap-6">
+                          <span className="text-muted-foreground w-28">Margine %</span>
+                          <span className="font-semibold">{quoteSummary.distinctMargins[0].percent.toFixed(1)}%</span>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="text-muted-foreground mb-0.5">Margini %</div>
+                          <div className="pl-2 space-y-0.5">
+                            {quoteSummary.distinctMargins.map((g) => (
+                              <div key={g.percent} className="flex items-center gap-4" data-testid={`margin-group-${g.percent}`}>
+                                <span className="font-semibold w-12">{g.percent.toFixed(1)}%</span>
+                                <span className="text-muted-foreground text-xs">
+                                  {g.count} {g.count === 1 ? "riga" : "righe"} — € {formatEur(g.revenue)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="text-right sm:ml-auto">
+                    <div className="text-xs text-muted-foreground">Totale stimato</div>
+                    <div className="text-2xl font-semibold" data-testid="text-total">
+                      € {formatEur(totalEstimated)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      I prezzi vengono ricalcolati e congelati al salvataggio
+                    </div>
                   </div>
                 </div>
               </div>
