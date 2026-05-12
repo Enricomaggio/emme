@@ -104,6 +104,8 @@ interface QuoteItemDraft {
   // Cost/margin data for live summary panel
   costRow?: string | null;
   effectiveMargin?: string | null;
+  // LATTONERIA: cost per kg stored at save time (€/kg)
+  unitCostPerKg?: string | null;
 }
 
 type QuoteItemPayload =
@@ -177,6 +179,7 @@ interface QuoteResponse {
     developmentMm: string | null;
     quantity: string;
     unitCost: string | null;
+    weightKg: string | null;
     marginPercent: string | null;
     discountPercent: string | null;
     overrideTotal: string | null;
@@ -723,6 +726,20 @@ function LattoneriaForm({
         />
         {preview && (
           <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1" data-testid="preview-lattoneria">
+            <div>
+              Costo unitario:{" "}
+              <span className="font-medium" data-testid="preview-unit-cost-per-kg">
+                {(() => {
+                  const costKg = isSingle
+                    ? parseFloat(String(selectedMaterial?.singleCostPerKg ?? "0"))
+                    : parseFloat(String(selectedThickness?.costPerKg ?? "0"));
+                  return `${formatEur(costKg)} €/kg`;
+                })()}
+              </span>
+              {isSingle && (
+                <span className="ml-1 text-xs text-muted-foreground">(prezzo unico materiale)</span>
+              )}
+            </div>
             <div>Peso stimato: <span className="font-medium">{preview.weightKg.toFixed(2)} kg</span></div>
             <div>Costo: <span className="font-medium">€ {formatEur(preview.cost)}</span></div>
             <div>Margine applicato: <span className="font-medium">{preview.margin.toFixed(2)}%</span></div>
@@ -1322,30 +1339,34 @@ export default function QuoteEditorPage() {
     enabled: !!opportunityId,
   });
 
-  // Hydrate state from loaded quote
-  useEffect(() => {
-    if (!quoteQuery.data) return;
-    const q = quoteQuery.data;
-    setSubject(q.subject || "");
-    setNotes(q.notes || "");
-    setNumber(q.number);
-    setItems(
-      (q.items || [])
-        .slice()
-        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-        .map((i) => {
-          const qty = parseFloat(i.quantity);
-          const unitCostVal = parseFloat(i.unitCost || "0");
-          const marginPct = parseFloat(i.marginPercent || "0");
-          const totalRowVal = parseFloat(i.totalRow);
-          // Derive costRow from saved data.
-          // For ARTICOLO, GIORNATE, MANUALE: unitCost is per unit of quantity, so cost = unitCost * qty.
-          // For LATTONERIA: unitCost is stored as €/kg (incompatible with ml quantity), so always use
-          // the reverse-margin formula: cost = preDiscountTotal / (1 + marginPercent/100).
-          // Prefer baseTotal over totalRow for the reverse-margin formula — baseTotal is the pre-discount
-          // price, so it gives the true cost even when a discount/override has been applied.
-          let costRow: string | null = null;
-          const canUseUnitCost = i.type !== "LATTONERIA" && i.unitCost && isFinite(unitCostVal) && isFinite(qty);
+  // Hydrate a raw API items array into local QuoteItemDraft[]
+  function hydrateItemsFromResponse(rawItems: QuoteResponse["items"]): QuoteItemDraft[] {
+    return rawItems
+      .slice()
+      .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+      .map((i) => {
+        const qty = parseFloat(i.quantity);
+        const unitCostVal = parseFloat(i.unitCost || "0");
+        const marginPct = parseFloat(i.marginPercent || "0");
+        const totalRowVal = parseFloat(i.totalRow);
+        // Derive costRow from saved data.
+        // For LATTONERIA: weightKg * unitCost gives the exact material cost if both fields are
+        // present. Fall back to the reverse-margin formula when weightKg is missing.
+        // For ARTICOLO, GIORNATE, MANUALE: unitCost is per unit of quantity, so cost = unitCost * qty.
+        let costRow: string | null = null;
+        if (i.type === "LATTONERIA") {
+          const weightKgVal = parseFloat(i.weightKg || "");
+          if (isFinite(weightKgVal) && weightKgVal > 0 && isFinite(unitCostVal)) {
+            costRow = (weightKgVal * unitCostVal).toFixed(2);
+          } else if (isFinite(marginPct) && marginPct >= 0) {
+            const baseTotalVal = parseFloat(i.baseTotal || "");
+            const refTotal = isFinite(baseTotalVal) && baseTotalVal > 0 ? baseTotalVal : totalRowVal;
+            if (isFinite(refTotal)) {
+              costRow = (refTotal / (1 + marginPct / 100)).toFixed(2);
+            }
+          }
+        } else {
+          const canUseUnitCost = i.unitCost && isFinite(unitCostVal) && isFinite(qty);
           if (canUseUnitCost) {
             costRow = (unitCostVal * qty).toFixed(2);
           } else if (isFinite(marginPct) && marginPct >= 0) {
@@ -1355,42 +1376,52 @@ export default function QuoteEditorPage() {
               costRow = (refTotal / (1 + marginPct / 100)).toFixed(2);
             }
           }
-          // Recalculate effective margin % to reflect post-discount/override revenue
-          // Formula: (finalRevenue - cost) / cost * 100
-          // Cost is estimated from baseTotal and original marginPercent
-          let effectiveMargin: string | null = i.marginPercent || null;
-          if (i.baseTotal && i.totalRow && i.marginPercent) {
-            const baseTotalNum = parseFloat(i.baseTotal);
-            const finalTotalNum = parseFloat(i.totalRow);
-            const marginPctNum = parseFloat(i.marginPercent);
-            const estimatedCost = baseTotalNum / (1 + marginPctNum / 100);
-            if (estimatedCost > 0 && isFinite(estimatedCost)) {
-              effectiveMargin = ((finalTotalNum - estimatedCost) / estimatedCost * 100).toFixed(4);
-            }
+        }
+        // Recalculate effective margin % to reflect post-discount/override revenue
+        // Formula: (finalRevenue - cost) / cost * 100
+        let effectiveMargin: string | null = i.marginPercent || null;
+        if (i.baseTotal && i.totalRow && i.marginPercent) {
+          const baseTotalNum = parseFloat(i.baseTotal);
+          const finalTotalNum = parseFloat(i.totalRow);
+          const marginPctNum = parseFloat(i.marginPercent);
+          const estimatedCost = baseTotalNum / (1 + marginPctNum / 100);
+          if (estimatedCost > 0 && isFinite(estimatedCost)) {
+            effectiveMargin = ((finalTotalNum - estimatedCost) / estimatedCost * 100).toFixed(4);
           }
-          return {
-            uid: i.id,
-            type: (i.type ?? "ARTICOLO") as QuoteItemType,
-            description: i.description || "",
-            materialId: i.materialId || undefined,
-            materialThicknessId: i.materialThicknessId || undefined,
-            materialFinishId: i.materialFinishId || undefined,
-            developmentMm: i.developmentMm || undefined,
-            catalogArticleId: i.catalogArticleId || undefined,
-            laborRateId: i.laborRateId || undefined,
-            unitCost: i.type === "MANUALE" ? (i.unitCost || "0") : undefined,
-            quantity: i.quantity,
-            marginPercent: i.marginPercent || undefined,
-            discountPercent: i.discountPercent && parseFloat(i.discountPercent) > 0 ? i.discountPercent : undefined,
-            overrideTotal: i.overrideTotal || null,
-            unitOfMeasure: i.unitOfMeasure,
-            baseTotal: i.baseTotal || i.totalRow,
-            totalRow: i.totalRow,
-            costRow,
-            effectiveMargin,
-          };
-        }),
-    );
+        }
+        return {
+          uid: i.id,
+          type: (i.type ?? "ARTICOLO") as QuoteItemType,
+          description: i.description || "",
+          materialId: i.materialId || undefined,
+          materialThicknessId: i.materialThicknessId || undefined,
+          materialFinishId: i.materialFinishId || undefined,
+          developmentMm: i.developmentMm || undefined,
+          catalogArticleId: i.catalogArticleId || undefined,
+          laborRateId: i.laborRateId || undefined,
+          unitCost: i.type === "MANUALE" ? (i.unitCost || "0") : undefined,
+          unitCostPerKg: i.type === "LATTONERIA" ? (i.unitCost || null) : undefined,
+          quantity: i.quantity,
+          marginPercent: i.marginPercent || undefined,
+          discountPercent: i.discountPercent && parseFloat(i.discountPercent) > 0 ? i.discountPercent : undefined,
+          overrideTotal: i.overrideTotal || null,
+          unitOfMeasure: i.unitOfMeasure,
+          baseTotal: i.baseTotal || i.totalRow,
+          totalRow: i.totalRow,
+          costRow,
+          effectiveMargin,
+        };
+      });
+  }
+
+  // Hydrate state from loaded quote
+  useEffect(() => {
+    if (!quoteQuery.data) return;
+    const q = quoteQuery.data;
+    setSubject(q.subject || "");
+    setNotes(q.notes || "");
+    setNumber(q.number);
+    setItems(hydrateItemsFromResponse(q.items || []));
   }, [quoteQuery.data]);
 
   // Hydrate next number for new quotes
@@ -1517,6 +1548,11 @@ export default function QuoteEditorPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes/next-number"] });
       if (isNew) {
         navigate(`/quotes/${data.id}`);
+      } else {
+        // Immediately refresh local items from the server response so the summary
+        // panel reflects the re-computed unitCost/baseTotal (e.g. after a SINGLE-mode
+        // material price change) without waiting for the query to re-fetch.
+        setItems(hydrateItemsFromResponse(data.items || []));
       }
     },
     onError: (err: unknown) => {
@@ -1637,7 +1673,10 @@ export default function QuoteEditorPage() {
       const f = it.materialFinishId ? t?.finishes?.find((x) => x.id === it.materialFinishId) : undefined;
       const desc = it.description ||
         (m && t ? `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}` : "Lattoneria");
-      return `${desc} — sviluppo ${it.developmentMm ? fmtQty(it.developmentMm) : "?"}cm × ${fmtQty(it.quantity)} ml`;
+      const costSuffix = it.unitCostPerKg
+        ? ` — ${formatEur(parseFloat(it.unitCostPerKg))} €/kg`
+        : "";
+      return `${desc} — sviluppo ${it.developmentMm ? fmtQty(it.developmentMm) : "?"}cm × ${fmtQty(it.quantity)} ml${costSuffix}`;
     }
     if (it.type === "ARTICOLO") {
       let variantName: string | undefined;
