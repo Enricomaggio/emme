@@ -1586,6 +1586,26 @@ export default function QuoteEditorPage() {
     setItems((prev) => prev.map((i) => (i.uid === uid ? { uid, ...draft } : i)));
   }
 
+  function updateItemDiscount(uid: string, discountStr: string) {
+    setItems((prev) => prev.map((it) => {
+      if (it.uid !== uid) return it;
+      const discount = parseFloat(discountStr) || 0;
+      // Always compute from the true base: prefer stored baseTotal, fall back to
+      // current totalRow (only safe on the first change — we then persist baseTotal
+      // so subsequent edits always compute from the undiscounted original).
+      const effectiveBase = it.baseTotal
+        ? parseFloat(it.baseTotal)
+        : (it.totalRow ? parseFloat(it.totalRow) : null);
+      const newTotal = effectiveBase != null ? +(effectiveBase * (1 - discount / 100)).toFixed(2) : null;
+      return {
+        ...it,
+        discountPercent: discount > 0 ? String(discount) : undefined,
+        baseTotal: effectiveBase != null ? String(effectiveBase) : it.baseTotal,
+        totalRow: newTotal != null ? String(newTotal) : it.totalRow,
+      };
+    }));
+  }
+
   const isLoading =
     materialsQuery.isLoading ||
     articleFamiliesQuery.isLoading ||
@@ -1829,6 +1849,7 @@ export default function QuoteEditorPage() {
                     <TableRow>
                       <TableHead className="w-[100px]">Tipo</TableHead>
                       <TableHead>Descrizione</TableHead>
+                      <TableHead className="w-[80px] text-right">Sconto %</TableHead>
                       <TableHead className="text-right">Totale</TableHead>
                       <TableHead className="w-[140px] text-right">Azioni</TableHead>
                     </TableRow>
@@ -1843,6 +1864,19 @@ export default function QuoteEditorPage() {
                       >
                         <TableCell>{rowTypeBadge(it.type)}</TableCell>
                         <TableCell className="text-sm">{rowDetails(it)}</TableCell>
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.5"
+                            value={it.discountPercent && parseFloat(it.discountPercent) > 0 ? parseFloat(it.discountPercent) : ""}
+                            placeholder="0"
+                            onChange={(e) => updateItemDiscount(it.uid, e.target.value)}
+                            data-testid={`input-discount-${it.uid}`}
+                            className="w-14 h-7 text-right text-sm rounded border border-input bg-transparent px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                        </TableCell>
                         <TableCell className="text-right font-medium">
                           {(() => {
                             const hasDiscount = (it.discountPercent && parseFloat(it.discountPercent) > 0) || (it.overrideTotal != null && it.overrideTotal !== "");
