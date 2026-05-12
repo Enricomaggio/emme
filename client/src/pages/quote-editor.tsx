@@ -1437,29 +1437,15 @@ export default function QuoteEditorPage() {
 
   const quoteSummary = useMemo(() => {
     let totalCost = 0;
-    const marginGroups = new Map<number, { count: number; revenue: number; cost: number }>();
-
     for (const it of items) {
-      const revenue = parseFloat(it.totalRow || "0");
       const cost = parseFloat(it.costRow || "0");
-      const margin = parseFloat(it.effectiveMargin || "0");
-      const marginKey = Math.round((isFinite(margin) ? margin : 0) * 10) / 10;
-
       totalCost += isFinite(cost) ? cost : 0;
-
-      const group = marginGroups.get(marginKey) ?? { count: 0, revenue: 0, cost: 0 };
-      group.count++;
-      group.revenue += isFinite(revenue) ? revenue : 0;
-      group.cost += isFinite(cost) ? cost : 0;
-      marginGroups.set(marginKey, group);
     }
 
     const totalMarginEur = totalEstimated - totalCost;
-    const distinctMargins = Array.from(marginGroups.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([percent, { count, revenue, cost }]) => ({ percent, count, revenue, cost }));
+    const avgMarginPercent = totalEstimated !== 0 ? (totalMarginEur / totalEstimated) * 100 : 0;
 
-    return { totalCost, totalMarginEur, distinctMargins };
+    return { totalCost, totalMarginEur, avgMarginPercent };
   }, [items, totalEstimated]);
 
   function buildPayload(): QuoteSavePayload {
@@ -1965,26 +1951,10 @@ export default function QuoteEditorPage() {
                         <span className="text-muted-foreground w-28">Margine €</span>
                         <span className="font-semibold">€ {formatEur(quoteSummary.totalMarginEur)}</span>
                       </div>
-                      {quoteSummary.distinctMargins.length === 1 ? (
-                        <div className="flex items-center gap-6">
-                          <span className="text-muted-foreground w-28">Margine %</span>
-                          <span className="font-semibold">{quoteSummary.distinctMargins[0].percent.toFixed(1)}%</span>
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="text-muted-foreground mb-0.5">Margini %</div>
-                          <div className="pl-2 space-y-0.5">
-                            {quoteSummary.distinctMargins.map((g) => (
-                              <div key={g.percent} className="flex items-center gap-4" data-testid={`margin-group-${g.percent}`}>
-                                <span className="font-semibold w-12">{g.percent.toFixed(1)}%</span>
-                                <span className="text-muted-foreground text-xs">
-                                  {g.count} {g.count === 1 ? "riga" : "righe"} — € {formatEur(g.revenue)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-6">
+                        <span className="text-muted-foreground w-28">Margine %</span>
+                        <span className="font-semibold" data-testid="avg-margin-percent">{quoteSummary.avgMarginPercent.toFixed(1)}%</span>
+                      </div>
                     </div>
                   )}
                   <div className="text-right sm:ml-auto">
