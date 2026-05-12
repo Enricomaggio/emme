@@ -392,6 +392,12 @@ export const QuotePdfDocument = ({ company, customer, quote, opportunityTitle, p
             <Text style={styles.totalsLabel}>Imponibile</Text>
             <Text style={styles.totalsValue}>€ {fmt(totals.subtotale)}</Text>
           </View>
+          {totals.totalDiscount > 0 && (
+            <View style={styles.totalsRow}>
+              <Text style={[styles.totalsLabel, { color: COLORS.accent }]}>Sconto totale</Text>
+              <Text style={[styles.totalsValue, { color: COLORS.accent }]}>- € {fmt(totals.totalDiscount)}</Text>
+            </View>
+          )}
           <View style={styles.totalsRow}>
             <Text style={styles.totalsLabel}>IVA {totals.vatPercent}%</Text>
             <Text style={styles.totalsValue}>€ {fmt(totals.iva)}</Text>

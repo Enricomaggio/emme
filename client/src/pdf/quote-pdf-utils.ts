@@ -106,7 +106,17 @@ export function computeTotals(quote: PdfQuote, vatPercent = 22) {
     Number.isFinite(persisted) && persisted > 0 ? persisted : fromItems;
   const iva = (subtotale * vatPercent) / 100;
   const totale = subtotale + iva;
-  return { subtotale, iva, totale, vatPercent };
+
+  const totalDiscount = quote.items.reduce((s, it) => {
+    const base = parseFloat(it.baseTotal || "");
+    const row = parseFloat(it.totalRow) || 0;
+    if (Number.isFinite(base) && base > row) {
+      return s + (base - row);
+    }
+    return s;
+  }, 0);
+
+  return { subtotale, iva, totale, vatPercent, totalDiscount };
 }
 
 export function applyTemplate(
