@@ -683,8 +683,15 @@ export const quoteItems = pgTable("quote_items", {
   priceSnapshot: jsonb("price_snapshot").$type<PricingData>(),
   vatRate: text("vat_rate").$type<VatRate>(),
 
+  // Sconto percentuale per riga (0 = nessuno sconto)
+  discountPercent: numeric("discount_percent").notNull().default("0"),
+  // Override manuale del totale riga (se valorizzato, sovrascrive il calcolo automatico)
+  overrideTotal: numeric("override_total"),
+
   // Prezzo finale (totalRow = totale riga, unitPriceApplied = prezzo unitario applicato)
   unitPriceApplied: numeric("unit_price_applied").notNull().default("0"),
+  // Totale calcolato prima di sconto/override (snapshot del prezzo "pieno")
+  baseTotal: numeric("base_total"),
   totalRow: numeric("total_row").notNull().default("0"),
 
   // Ordinamento riga nel preventivo

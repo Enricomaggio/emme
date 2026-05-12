@@ -32,6 +32,8 @@ const itemBaseSchema = z.object({
   id: z.string().optional(), // ignored on save (server reissues IDs)
   description: z.string().nullable().optional(),
   marginPercent: z.coerce.number().min(0).max(10000).optional(),
+  discountPercent: z.coerce.number().min(0).max(100).optional().default(0),
+  overrideTotal: z.coerce.number().min(0).nullable().optional(),
 });
 
 const lattoneriaItemSchema = itemBaseSchema.extend({
@@ -63,6 +65,8 @@ const manualeItemSchema = z.object({
   quantity: z.coerce.number().positive("Quantità deve essere > 0"),
   unitCost: z.coerce.number().min(0, "Costo unitario deve essere >= 0"),
   marginPercent: z.coerce.number().min(0).max(10000).optional(),
+  discountPercent: z.coerce.number().min(0).max(100).optional().default(0),
+  overrideTotal: z.coerce.number().min(0).nullable().optional(),
 });
 
 const quoteItemInputSchema = z.discriminatedUnion("type", [
@@ -93,6 +97,9 @@ interface ComputedItem {
   unitCost: string;
   marginPercent: string;
   unitPriceApplied: string;
+  baseTotal: string;
+  discountPercent: string;
+  overrideTotal: string | null;
   totalRow: string;
   // FKs
   materialId: string | null;
@@ -110,6 +117,22 @@ function round2(n: number): number {
 function round4(n: number): number {
   if (!isFinite(n)) return 0;
   return Math.round(n * 10000) / 10000;
+}
+
+function applyDiscountOrOverride(
+  baseTotal: number,
+  discountPercent: number | undefined,
+  overrideTotal: number | null | undefined,
+): { totalRow: number; discountPercent: number; overrideTotal: number | null } {
+  const discount = discountPercent ?? 0;
+  if (overrideTotal != null && isFinite(overrideTotal)) {
+    return { totalRow: overrideTotal, discountPercent: discount, overrideTotal };
+  }
+  if (isFinite(discount) && discount > 0) {
+    const discounted = baseTotal * (1 - discount / 100);
+    return { totalRow: discounted, discountPercent: discount, overrideTotal: null };
+  }
+  return { totalRow: baseTotal, discountPercent: 0, overrideTotal: null };
 }
 
 async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
@@ -146,9 +169,11 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
     const weightKg = (developmentMm / 1000) * meters * (thicknessMm / 1000) * density;
     // Costo(€) = Peso * costo_kg
     const cost = weightKg * costPerKg;
-    // Prezzo(€) = Costo * (1 + margine/100)
-    const total = cost * (1 + margin / 100);
-    const unitPrice = meters > 0 ? total / meters : 0;
+    // Prezzo base(€) = Costo * (1 + margine/100)
+    const baseTotal = cost * (1 + margin / 100);
+    const unitPrice = meters > 0 ? baseTotal / meters : 0;
+
+    const { totalRow, discountPercent, overrideTotal } = applyDiscountOrOverride(baseTotal, input.discountPercent, input.overrideTotal);
 
     const defaultDescription = finish
       ? `${material.name} ${thicknessMm}mm — ${finish.name}`
@@ -164,7 +189,10 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       unitCost: String(round4(costPerKg)),
       marginPercent: String(round2(margin)),
       unitPriceApplied: String(round2(unitPrice)),
-      totalRow: String(round2(total)),
+      baseTotal: String(round2(baseTotal)),
+      discountPercent: String(round2(discountPercent)),
+      overrideTotal: overrideTotal != null ? String(round2(overrideTotal)) : null,
+      totalRow: String(round2(totalRow)),
       materialId: material.id,
       materialThicknessId: thickness.id,
       materialFinishId: input.materialFinishId ?? null,
@@ -184,8 +212,10 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       : parseFloat(article.marginPercent);
 
     const cost = unitCost * quantity;
-    const total = cost * (1 + margin / 100);
-    const unitPrice = quantity > 0 ? total / quantity : 0;
+    const baseTotal = cost * (1 + margin / 100);
+    const unitPrice = quantity > 0 ? baseTotal / quantity : 0;
+
+    const { totalRow, discountPercent, overrideTotal } = applyDiscountOrOverride(baseTotal, input.discountPercent, input.overrideTotal);
 
     return {
       type: "ARTICOLO",
@@ -197,7 +227,10 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       unitCost: String(round4(unitCost)),
       marginPercent: String(round2(margin)),
       unitPriceApplied: String(round2(unitPrice)),
-      totalRow: String(round2(total)),
+      baseTotal: String(round2(baseTotal)),
+      discountPercent: String(round2(discountPercent)),
+      overrideTotal: overrideTotal != null ? String(round2(overrideTotal)) : null,
+      totalRow: String(round2(totalRow)),
       materialId: null,
       materialThicknessId: null,
       materialFinishId: null,
@@ -211,7 +244,10 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
     const unitCost = Number(input.unitCost);
     const margin = input.marginPercent !== undefined ? Number(input.marginPercent) : 0;
     const unitPriceApplied = unitCost * (1 + margin / 100);
-    const totalRow = quantity * unitPriceApplied;
+    const baseTotal = quantity * unitPriceApplied;
+
+    const { totalRow, discountPercent, overrideTotal } = applyDiscountOrOverride(baseTotal, input.discountPercent, input.overrideTotal);
+
     return {
       type: "MANUALE",
       description: input.description.trim(),
@@ -222,6 +258,9 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       unitCost: String(round4(unitCost)),
       marginPercent: String(round2(margin)),
       unitPriceApplied: String(round2(unitPriceApplied)),
+      baseTotal: String(round2(baseTotal)),
+      discountPercent: String(round2(discountPercent)),
+      overrideTotal: overrideTotal != null ? String(round2(overrideTotal)) : null,
       totalRow: String(round2(totalRow)),
       materialId: null,
       materialThicknessId: null,
@@ -242,8 +281,10 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
     : parseFloat(labor.marginPercent);
 
   const cost = unitCost * days;
-  const total = cost * (1 + margin / 100);
-  const unitPrice = days > 0 ? total / days : 0;
+  const baseTotal = cost * (1 + margin / 100);
+  const unitPrice = days > 0 ? baseTotal / days : 0;
+
+  const { totalRow, discountPercent, overrideTotal } = applyDiscountOrOverride(baseTotal, input.discountPercent, input.overrideTotal);
 
   return {
     type: "GIORNATE",
@@ -255,7 +296,10 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
     unitCost: String(round4(unitCost)),
     marginPercent: String(round2(margin)),
     unitPriceApplied: String(round2(unitPrice)),
-    totalRow: String(round2(total)),
+    baseTotal: String(round2(baseTotal)),
+    discountPercent: String(round2(discountPercent)),
+    overrideTotal: overrideTotal != null ? String(round2(overrideTotal)) : null,
+    totalRow: String(round2(totalRow)),
     materialId: null,
     materialThicknessId: null,
     materialFinishId: null,
@@ -281,6 +325,9 @@ function toInsertItem(quoteId: string, computed: ComputedItem, displayOrder: num
     unitCost: computed.unitCost,
     marginPercent: computed.marginPercent,
     unitPriceApplied: computed.unitPriceApplied,
+    baseTotal: computed.baseTotal,
+    discountPercent: computed.discountPercent,
+    overrideTotal: computed.overrideTotal,
     totalRow: computed.totalRow,
     displayOrder,
   };

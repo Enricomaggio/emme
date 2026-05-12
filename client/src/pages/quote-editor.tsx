@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -94,8 +94,12 @@ interface QuoteItemDraft {
   unitCost?: string;
   quantity: string;
   marginPercent?: string; // optional override
+  // Sconto riga
+  discountPercent?: string;
+  overrideTotal?: string | null;
   // For display only — frozen on saved items
   unitOfMeasure?: string | null;
+  baseTotal?: string | null; // prezzo calcolato prima di sconto/override
   totalRow?: string | null;
   // Cost/margin data for live summary panel
   costRow?: string | null;
@@ -108,6 +112,8 @@ type QuoteItemPayload =
       description: string | null;
       quantity: string;
       marginPercent?: string;
+      discountPercent?: string;
+      overrideTotal?: string | null;
       materialId: string;
       materialThicknessId: string;
       materialFinishId?: string;
@@ -118,6 +124,8 @@ type QuoteItemPayload =
       description: string | null;
       quantity: string;
       marginPercent?: string;
+      discountPercent?: string;
+      overrideTotal?: string | null;
       catalogArticleId: string;
     }
   | {
@@ -125,6 +133,8 @@ type QuoteItemPayload =
       description: string | null;
       quantity: string;
       marginPercent?: string;
+      discountPercent?: string;
+      overrideTotal?: string | null;
       laborRateId: string;
     }
   | {
@@ -134,6 +144,8 @@ type QuoteItemPayload =
       quantity: string;
       unitCost: string;
       marginPercent?: string;
+      discountPercent?: string;
+      overrideTotal?: string | null;
     };
 
 interface QuoteSavePayload {
@@ -166,6 +178,9 @@ interface QuoteResponse {
     quantity: string;
     unitCost: string | null;
     marginPercent: string | null;
+    discountPercent: string | null;
+    overrideTotal: string | null;
+    baseTotal: string | null;
     unitPriceApplied: string;
     totalRow: string;
     displayOrder: number;
@@ -180,7 +195,87 @@ function genUid(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// ==================== Shared Discount/Override fields ====================
+
+interface WithDiscountFields {
+  discountPercent?: string;
+  overrideTotal?: string;
+}
+
+function DiscountFields<T extends WithDiscountFields>({ form, baseTotal }: { form: UseFormReturn<T>; baseTotal: number | null }) {
+  const discountPct = form.watch("discountPercent");
+  const overrideTotalVal = form.watch("overrideTotal");
+
+  const discountedTotal = useMemo(() => {
+    if (baseTotal == null) return null;
+    const pct = parseFloat(discountPct || "0");
+    if (!isFinite(pct) || pct <= 0) return null;
+    return baseTotal * (1 - pct / 100);
+  }, [baseTotal, discountPct]);
+
+  const overrideNum = useMemo(() => {
+    const v = parseFloat(overrideTotalVal || "");
+    return isFinite(v) && v >= 0 ? v : null;
+  }, [overrideTotalVal]);
+
+  const finalTotal = overrideNum != null ? overrideNum : discountedTotal;
+
+  return (
+    <div className="border-t pt-3 space-y-3">
+      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sconto / Override prezzo</div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Sconto %</label>
+          <Input
+            type="number"
+            step="any"
+            min="0"
+            max="100"
+            placeholder="0"
+            {...form.register("discountPercent")}
+            data-testid="input-discount-percent"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Totale manuale (€)</label>
+          <Input
+            type="number"
+            step="any"
+            min="0"
+            placeholder="—"
+            {...form.register("overrideTotal")}
+            data-testid="input-override-total"
+          />
+        </div>
+      </div>
+      {(finalTotal != null || overrideNum != null) && baseTotal != null && (
+        <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 text-sm" data-testid="discount-preview">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-muted-foreground">Prezzo originale:</span>
+            <span className="line-through text-muted-foreground">€ {formatEur(baseTotal)}</span>
+            <span className="text-muted-foreground">→</span>
+            <span className="font-semibold text-amber-800 dark:text-amber-200">
+              € {formatEur(overrideNum != null ? overrideNum : (discountedTotal ?? baseTotal))}
+            </span>
+            {overrideNum == null && discountedTotal != null && (
+              <span className="text-xs text-muted-foreground">(-{parseFloat(discountPct || "0").toFixed(1)}%)</span>
+            )}
+            {overrideNum != null && (
+              <span className="text-xs text-muted-foreground">(manuale)</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ==================== Type-specific add forms ====================
+
+const discountFields = {
+  discountPercent: z.string().optional(),
+  overrideTotal: z.string().optional(),
+};
 
 const lattoneriaFormSchema = z.object({
   materialId: z.string().min(1, "Seleziona un materiale"),
@@ -190,6 +285,7 @@ const lattoneriaFormSchema = z.object({
   quantity: z.string().refine((v) => parseFloat(v) > 0, { message: "Metri > 0" }),
   description: z.string().optional(),
   marginPercent: z.string().optional(),
+  ...discountFields,
 });
 
 const articoloFormSchema = z.object({
@@ -197,6 +293,7 @@ const articoloFormSchema = z.object({
   quantity: z.string().refine((v) => parseFloat(v) > 0, { message: "Quantità > 0" }),
   description: z.string().optional(),
   marginPercent: z.string().optional(),
+  ...discountFields,
 });
 
 const giornateFormSchema = z.object({
@@ -204,6 +301,7 @@ const giornateFormSchema = z.object({
   quantity: z.string().refine((v) => parseFloat(v) > 0, { message: "Giorni > 0" }),
   description: z.string().optional(),
   marginPercent: z.string().optional(),
+  ...discountFields,
 });
 
 const manualeFormSchema = z.object({
@@ -212,6 +310,7 @@ const manualeFormSchema = z.object({
   quantity: z.string().refine((v) => parseFloat(v) > 0, { message: "Quantità deve essere > 0" }),
   unitCost: z.string().refine((v) => parseFloat(v) >= 0, { message: "Costo unitario >= 0" }),
   marginPercent: z.string().optional(),
+  ...discountFields,
 });
 
 type QuoteItemDraftValues = Omit<QuoteItemDraft, "uid">;
@@ -370,6 +469,8 @@ function LattoneriaForm({
       quantity: initial?.quantity ?? "",
       description: initial?.description ?? "",
       marginPercent: initial?.marginPercent ?? "",
+      discountPercent: initial?.discountPercent ?? "",
+      overrideTotal: initial?.overrideTotal ?? "",
     },
   });
 
@@ -433,6 +534,19 @@ function LattoneriaForm({
   }, [selectedMaterial, selectedThickness, developmentMm, quantity, marginOverride, isSingle]);
 
   const submit = form.handleSubmit((vals) => {
+    const discountPct = vals.discountPercent && parseFloat(vals.discountPercent) > 0
+      ? parseFloat(vals.discountPercent) : 0;
+    const overrideTotalVal = vals.overrideTotal && parseFloat(vals.overrideTotal) >= 0
+      ? parseFloat(vals.overrideTotal) : null;
+    const baseT = preview ? preview.total : null;
+    const finalTotal = overrideTotalVal != null
+      ? overrideTotalVal
+      : baseT != null && discountPct > 0
+        ? baseT * (1 - discountPct / 100)
+        : baseT;
+    const effectiveMarginPct = finalTotal != null && preview && preview.cost > 0
+      ? (finalTotal - preview.cost) / preview.cost * 100
+      : preview?.margin ?? 0;
     onSubmit({
       type: "LATTONERIA",
       description: vals.description || "",
@@ -442,10 +556,13 @@ function LattoneriaForm({
       developmentMm: vals.developmentMm,
       quantity: vals.quantity,
       marginPercent: vals.marginPercent || undefined,
+      discountPercent: discountPct > 0 ? String(discountPct) : undefined,
+      overrideTotal: overrideTotalVal != null ? String(overrideTotalVal) : null,
       unitOfMeasure: "ml",
-      totalRow: preview ? preview.total.toFixed(2) : null,
+      baseTotal: baseT != null ? baseT.toFixed(2) : null,
+      totalRow: finalTotal != null ? finalTotal.toFixed(2) : null,
       costRow: preview ? preview.cost.toFixed(2) : null,
-      effectiveMargin: preview ? preview.margin.toFixed(4) : null,
+      effectiveMargin: effectiveMarginPct.toFixed(4),
     });
   });
 
@@ -614,6 +731,7 @@ function LattoneriaForm({
             </div>
           </div>
         )}
+        <DiscountFields form={form} baseTotal={preview?.total ?? null} />
         <DialogFooter>
           <Button type="submit" data-testid={submitTestId}>
             {initial ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
@@ -655,6 +773,8 @@ function ArticoloForm({
       quantity: initial?.quantity ?? "",
       description: initial?.description ?? "",
       marginPercent: initial?.marginPercent ?? "",
+      discountPercent: initial?.discountPercent ?? "",
+      overrideTotal: initial?.overrideTotal ?? "",
     },
   });
 
@@ -687,16 +807,32 @@ function ArticoloForm({
   }, [selectedVariant, quantity, marginOverride]);
 
   const submit = form.handleSubmit((vals) => {
+    const discountPct = vals.discountPercent && parseFloat(vals.discountPercent) > 0
+      ? parseFloat(vals.discountPercent) : 0;
+    const overrideTotalVal = vals.overrideTotal && parseFloat(vals.overrideTotal) >= 0
+      ? parseFloat(vals.overrideTotal) : null;
+    const baseT = preview ? preview.total : null;
+    const finalTotal = overrideTotalVal != null
+      ? overrideTotalVal
+      : baseT != null && discountPct > 0
+        ? baseT * (1 - discountPct / 100)
+        : baseT;
+    const effectiveMarginPct = finalTotal != null && preview && preview.cost > 0
+      ? (finalTotal - preview.cost) / preview.cost * 100
+      : preview?.margin ?? 0;
     onSubmit({
       type: "ARTICOLO",
       description: vals.description || "",
       catalogArticleId: vals.catalogArticleId,
       quantity: vals.quantity,
       marginPercent: vals.marginPercent || undefined,
+      discountPercent: discountPct > 0 ? String(discountPct) : undefined,
+      overrideTotal: overrideTotalVal != null ? String(overrideTotalVal) : null,
       unitOfMeasure: selectedVariant?.unitOfMeasure ?? selectedFamily?.unitOfMeasure ?? "pz",
-      totalRow: preview ? preview.total.toFixed(2) : null,
+      baseTotal: baseT != null ? baseT.toFixed(2) : null,
+      totalRow: finalTotal != null ? finalTotal.toFixed(2) : null,
       costRow: preview ? preview.cost.toFixed(2) : null,
-      effectiveMargin: preview ? preview.margin.toFixed(4) : null,
+      effectiveMargin: effectiveMarginPct.toFixed(4),
     });
   });
 
@@ -802,6 +938,7 @@ function ArticoloForm({
             </div>
           </div>
         )}
+        <DiscountFields form={form} baseTotal={preview?.total ?? null} />
         <DialogFooter>
           <Button type="submit" data-testid={submitTestId}>
             {initial ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
@@ -833,6 +970,8 @@ function GiornateForm({
       quantity: initial?.quantity ?? "",
       description: initial?.description ?? "",
       marginPercent: initial?.marginPercent ?? "",
+      discountPercent: initial?.discountPercent ?? "",
+      overrideTotal: initial?.overrideTotal ?? "",
     },
   });
 
@@ -855,16 +994,32 @@ function GiornateForm({
   }, [selected, quantity, marginOverride]);
 
   const submit = form.handleSubmit((vals) => {
+    const discountPct = vals.discountPercent && parseFloat(vals.discountPercent) > 0
+      ? parseFloat(vals.discountPercent) : 0;
+    const overrideTotalVal = vals.overrideTotal && parseFloat(vals.overrideTotal) >= 0
+      ? parseFloat(vals.overrideTotal) : null;
+    const baseT = preview ? preview.total : null;
+    const finalTotal = overrideTotalVal != null
+      ? overrideTotalVal
+      : baseT != null && discountPct > 0
+        ? baseT * (1 - discountPct / 100)
+        : baseT;
+    const effectiveMarginPct = finalTotal != null && preview && preview.cost > 0
+      ? (finalTotal - preview.cost) / preview.cost * 100
+      : preview?.margin ?? 0;
     onSubmit({
       type: "GIORNATE",
       description: vals.description || "",
       laborRateId: vals.laborRateId,
       quantity: vals.quantity,
       marginPercent: vals.marginPercent || undefined,
+      discountPercent: discountPct > 0 ? String(discountPct) : undefined,
+      overrideTotal: overrideTotalVal != null ? String(overrideTotalVal) : null,
       unitOfMeasure: "gg",
-      totalRow: preview ? preview.total.toFixed(2) : null,
+      baseTotal: baseT != null ? baseT.toFixed(2) : null,
+      totalRow: finalTotal != null ? finalTotal.toFixed(2) : null,
       costRow: preview ? preview.cost.toFixed(2) : null,
-      effectiveMargin: preview ? preview.margin.toFixed(4) : null,
+      effectiveMargin: effectiveMarginPct.toFixed(4),
     });
   });
 
@@ -949,6 +1104,7 @@ function GiornateForm({
             </div>
           </div>
         )}
+        <DiscountFields form={form} baseTotal={preview?.total ?? null} />
         <DialogFooter>
           <Button type="submit" data-testid={submitTestId}>
             {initial ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
@@ -979,6 +1135,8 @@ function ManualeForm({
       quantity: initial?.quantity ?? "",
       unitCost: initial?.unitCost ?? "",
       marginPercent: initial?.marginPercent ?? "",
+      discountPercent: initial?.discountPercent ?? "",
+      overrideTotal: initial?.overrideTotal ?? "",
     },
   });
 
@@ -999,6 +1157,19 @@ function ManualeForm({
 
   const submit = form.handleSubmit((vals) => {
     const cost = preview ? (parseFloat(vals.unitCost) * parseFloat(vals.quantity)) : null;
+    const discountPct = vals.discountPercent && parseFloat(vals.discountPercent) > 0
+      ? parseFloat(vals.discountPercent) : 0;
+    const overrideTotalVal = vals.overrideTotal && parseFloat(vals.overrideTotal) >= 0
+      ? parseFloat(vals.overrideTotal) : null;
+    const baseT = preview ? preview.total : null;
+    const finalTotal = overrideTotalVal != null
+      ? overrideTotalVal
+      : baseT != null && discountPct > 0
+        ? baseT * (1 - discountPct / 100)
+        : baseT;
+    const effectiveMarginPct = finalTotal != null && cost != null && cost > 0
+      ? (finalTotal - cost) / cost * 100
+      : preview?.margin ?? 0;
     onSubmit({
       type: "MANUALE",
       description: vals.description,
@@ -1006,9 +1177,12 @@ function ManualeForm({
       quantity: vals.quantity,
       unitCost: vals.unitCost,
       marginPercent: vals.marginPercent || undefined,
-      totalRow: preview ? preview.total.toFixed(2) : null,
+      discountPercent: discountPct > 0 ? String(discountPct) : undefined,
+      overrideTotal: overrideTotalVal != null ? String(overrideTotalVal) : null,
+      baseTotal: baseT != null ? baseT.toFixed(2) : null,
+      totalRow: finalTotal != null ? finalTotal.toFixed(2) : null,
       costRow: cost !== null ? cost.toFixed(2) : null,
-      effectiveMargin: preview ? preview.margin.toFixed(4) : null,
+      effectiveMargin: effectiveMarginPct.toFixed(4),
     });
   });
 
@@ -1093,6 +1267,7 @@ function ManualeForm({
             </div>
           </div>
         )}
+        <DiscountFields form={form} baseTotal={preview?.total ?? null} />
         <DialogFooter>
           <Button type="submit" data-testid={submitTestId}>
             {initial ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
@@ -1166,13 +1341,32 @@ export default function QuoteEditorPage() {
           // Derive costRow from saved data.
           // For ARTICOLO, GIORNATE, MANUALE: unitCost is per unit of quantity, so cost = unitCost * qty.
           // For LATTONERIA: unitCost is stored as €/kg (incompatible with ml quantity), so always use
-          // the reverse-margin formula: cost = totalRow / (1 + marginPercent/100).
+          // the reverse-margin formula: cost = preDiscountTotal / (1 + marginPercent/100).
+          // Prefer baseTotal over totalRow for the reverse-margin formula — baseTotal is the pre-discount
+          // price, so it gives the true cost even when a discount/override has been applied.
           let costRow: string | null = null;
           const canUseUnitCost = i.type !== "LATTONERIA" && i.unitCost && isFinite(unitCostVal) && isFinite(qty);
           if (canUseUnitCost) {
             costRow = (unitCostVal * qty).toFixed(2);
-          } else if (isFinite(totalRowVal) && isFinite(marginPct) && marginPct >= 0) {
-            costRow = (totalRowVal / (1 + marginPct / 100)).toFixed(2);
+          } else if (isFinite(marginPct) && marginPct >= 0) {
+            const baseTotalVal = parseFloat(i.baseTotal || "");
+            const refTotal = isFinite(baseTotalVal) && baseTotalVal > 0 ? baseTotalVal : totalRowVal;
+            if (isFinite(refTotal)) {
+              costRow = (refTotal / (1 + marginPct / 100)).toFixed(2);
+            }
+          }
+          // Recalculate effective margin % to reflect post-discount/override revenue
+          // Formula: (finalRevenue - cost) / cost * 100
+          // Cost is estimated from baseTotal and original marginPercent
+          let effectiveMargin: string | null = i.marginPercent || null;
+          if (i.baseTotal && i.totalRow && i.marginPercent) {
+            const baseTotalNum = parseFloat(i.baseTotal);
+            const finalTotalNum = parseFloat(i.totalRow);
+            const marginPctNum = parseFloat(i.marginPercent);
+            const estimatedCost = baseTotalNum / (1 + marginPctNum / 100);
+            if (estimatedCost > 0 && isFinite(estimatedCost)) {
+              effectiveMargin = ((finalTotalNum - estimatedCost) / estimatedCost * 100).toFixed(4);
+            }
           }
           return {
             uid: i.id,
@@ -1187,10 +1381,13 @@ export default function QuoteEditorPage() {
             unitCost: i.type === "MANUALE" ? (i.unitCost || "0") : undefined,
             quantity: i.quantity,
             marginPercent: i.marginPercent || undefined,
+            discountPercent: i.discountPercent && parseFloat(i.discountPercent) > 0 ? i.discountPercent : undefined,
+            overrideTotal: i.overrideTotal || null,
             unitOfMeasure: i.unitOfMeasure,
+            baseTotal: i.baseTotal || i.totalRow,
             totalRow: i.totalRow,
             costRow,
-            effectiveMargin: i.marginPercent || null,
+            effectiveMargin,
           };
         }),
     );
@@ -1244,12 +1441,16 @@ export default function QuoteEditorPage() {
           it.marginPercent !== undefined && it.marginPercent !== ""
             ? it.marginPercent
             : undefined;
+        const discount = it.discountPercent && it.discountPercent !== "0" ? it.discountPercent : undefined;
+        const override = it.overrideTotal != null && it.overrideTotal !== "" ? it.overrideTotal : null;
         if (it.type === "LATTONERIA") {
           return {
             type: "LATTONERIA",
             description: it.description || null,
             quantity: it.quantity,
             marginPercent: margin,
+            discountPercent: discount,
+            overrideTotal: override,
             materialId: it.materialId ?? "",
             materialThicknessId: it.materialThicknessId ?? "",
             materialFinishId: it.materialFinishId || undefined,
@@ -1262,6 +1463,8 @@ export default function QuoteEditorPage() {
             description: it.description || null,
             quantity: it.quantity,
             marginPercent: margin,
+            discountPercent: discount,
+            overrideTotal: override,
             catalogArticleId: it.catalogArticleId ?? "",
           };
         }
@@ -1273,6 +1476,8 @@ export default function QuoteEditorPage() {
             quantity: it.quantity,
             unitCost: it.unitCost ?? "0",
             marginPercent: margin,
+            discountPercent: discount,
+            overrideTotal: override,
           };
         }
         return {
@@ -1280,6 +1485,8 @@ export default function QuoteEditorPage() {
           description: it.description || null,
           quantity: it.quantity,
           marginPercent: margin,
+          discountPercent: discount,
+          overrideTotal: override,
           laborRateId: it.laborRateId ?? "",
         };
       }),
@@ -1595,7 +1802,33 @@ export default function QuoteEditorPage() {
                         <TableCell>{rowTypeBadge(it.type)}</TableCell>
                         <TableCell className="text-sm">{rowDetails(it)}</TableCell>
                         <TableCell className="text-right font-medium">
-                          {it.totalRow ? `€ ${formatEur(parseFloat(it.totalRow))}` : "—"}
+                          {(() => {
+                            const hasDiscount = (it.discountPercent && parseFloat(it.discountPercent) > 0) || (it.overrideTotal != null && it.overrideTotal !== "");
+                            const originalTotal = it.baseTotal ? parseFloat(it.baseTotal) : null;
+                            const finalTotal = it.totalRow ? parseFloat(it.totalRow) : null;
+                            return (
+                              <div className="flex flex-col items-end gap-0.5">
+                                {hasDiscount && originalTotal != null && (
+                                  <span className="line-through text-muted-foreground text-xs" data-testid={`text-original-total-${it.uid}`}>
+                                    € {formatEur(originalTotal)}
+                                  </span>
+                                )}
+                                <span data-testid={`text-total-${it.uid}`} className={hasDiscount ? "text-amber-700 dark:text-amber-300" : ""}>
+                                  {finalTotal != null ? `€ ${formatEur(finalTotal)}` : "—"}
+                                </span>
+                                {hasDiscount && it.discountPercent && parseFloat(it.discountPercent) > 0 && it.overrideTotal == null && (
+                                  <span className="text-xs text-amber-600 dark:text-amber-400" data-testid={`badge-discount-${it.uid}`}>
+                                    -{parseFloat(it.discountPercent).toFixed(1)}%
+                                  </span>
+                                )}
+                                {it.overrideTotal != null && it.overrideTotal !== "" && (
+                                  <span className="text-xs text-amber-600 dark:text-amber-400" data-testid={`badge-override-${it.uid}`}>
+                                    manuale
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="inline-flex gap-1" onClick={(e) => e.stopPropagation()}>
