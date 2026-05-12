@@ -26,6 +26,10 @@ export interface PdfQuote {
   totalAmount: string;
   createdAt: string | Date;
   items: PdfQuoteItem[];
+  globalDiscount?: {
+    mode: "percent" | "euro";
+    value: number;
+  } | null;
 }
 
 export interface PdfCustomer {
@@ -104,8 +108,23 @@ export function computeTotals(quote: PdfQuote, vatPercent = 22) {
   const fromItems = quote.items.reduce((s, it) => s + (parseFloat(it.totalRow) || 0), 0);
   const subtotale =
     Number.isFinite(persisted) && persisted > 0 ? persisted : fromItems;
-  const iva = (subtotale * vatPercent) / 100;
-  const totale = subtotale + iva;
+
+  // Global discount — clamped so totals never go negative
+  let globalDiscountAmount = 0;
+  if (quote.globalDiscount && quote.globalDiscount.value > 0) {
+    let raw: number;
+    if (quote.globalDiscount.mode === "percent") {
+      const pct = Math.min(quote.globalDiscount.value, 100);
+      raw = (subtotale * pct) / 100;
+    } else {
+      raw = quote.globalDiscount.value;
+    }
+    globalDiscountAmount = Math.min(raw, subtotale);
+  }
+  const subtotalAfterGlobalDiscount = Math.max(0, subtotale - globalDiscountAmount);
+
+  const iva = (subtotalAfterGlobalDiscount * vatPercent) / 100;
+  const totale = subtotalAfterGlobalDiscount + iva;
 
   const totalDiscount = quote.items.reduce((s, it) => {
     const base = parseFloat(it.baseTotal || "");
@@ -116,7 +135,7 @@ export function computeTotals(quote: PdfQuote, vatPercent = 22) {
     return s;
   }, 0);
 
-  return { subtotale, iva, totale, vatPercent, totalDiscount };
+  return { subtotale, globalDiscountAmount, subtotalAfterGlobalDiscount, iva, totale, vatPercent, totalDiscount };
 }
 
 export function applyTemplate(

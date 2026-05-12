@@ -161,6 +161,7 @@ interface QuoteSavePayload {
   notes: string | null;
   number?: string;
   items: QuoteItemPayload[];
+  globalDiscount?: { mode: "percent" | "euro"; value: number } | undefined;
 }
 
 interface QuoteResponse {
@@ -172,6 +173,11 @@ interface QuoteResponse {
   subject: string | null;
   notes: string | null;
   createdAt: string;
+  discounts?: {
+    globalDiscountMode?: "percent" | "euro";
+    globalDiscountPercent?: number;
+    globalDiscountAmount?: number;
+  } | null;
   items: Array<{
     id: string;
     type: QuoteItemType | null;
@@ -1358,6 +1364,8 @@ export default function QuoteEditorPage() {
   const [number, setNumber] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<QuoteItemDraft | null>(null);
+  const [globalDiscountMode, setGlobalDiscountMode] = useState<"percent" | "euro">("percent");
+  const [globalDiscountValue, setGlobalDiscountValue] = useState<string>("");
 
   const materialsQuery = useQuery<MaterialWithThicknesses[]>({ queryKey: ["/api/materials"] });
   const articleFamiliesQuery = useQuery<ArticleFamilyWithVariants[]>({ queryKey: ["/api/article-families"] });
@@ -1465,6 +1473,17 @@ export default function QuoteEditorPage() {
     setNotes(q.notes || "");
     setNumber(q.number);
     setItems(hydrateItemsFromResponse(q.items || []));
+    // Hydrate global discount
+    if (q.discounts?.globalDiscountMode) {
+      setGlobalDiscountMode(q.discounts.globalDiscountMode);
+      const val = q.discounts.globalDiscountMode === "percent"
+        ? q.discounts.globalDiscountPercent
+        : q.discounts.globalDiscountAmount;
+      setGlobalDiscountValue(val != null && val > 0 ? String(val) : "");
+    } else {
+      setGlobalDiscountMode("percent");
+      setGlobalDiscountValue("");
+    }
   }, [quoteQuery.data]);
 
   // Hydrate next number for new quotes
@@ -1478,6 +1497,25 @@ export default function QuoteEditorPage() {
     return items.reduce((sum, it) => sum + parseFloat(it.totalRow || "0"), 0);
   }, [items]);
 
+  const globalDiscountAmount = useMemo(() => {
+    const val = parseFloat(globalDiscountValue || "0");
+    if (!isFinite(val) || val <= 0) return 0;
+    let raw: number;
+    if (globalDiscountMode === "percent") {
+      // Clamp percent to 100% max
+      const pct = Math.min(val, 100);
+      raw = totalEstimated * pct / 100;
+    } else {
+      raw = val;
+    }
+    // Never discount more than the subtotal
+    return Math.min(raw, totalEstimated);
+  }, [globalDiscountMode, globalDiscountValue, totalEstimated]);
+
+  const totalAfterDiscount = useMemo(() => {
+    return Math.max(0, totalEstimated - globalDiscountAmount);
+  }, [totalEstimated, globalDiscountAmount]);
+
   const quoteSummary = useMemo(() => {
     let totalCost = 0;
     for (const it of items) {
@@ -1485,17 +1523,23 @@ export default function QuoteEditorPage() {
       totalCost += isFinite(cost) ? cost : 0;
     }
 
-    const totalMarginEur = totalEstimated - totalCost;
-    const avgMarginPercent = totalEstimated !== 0 ? (totalMarginEur / totalEstimated) * 100 : 0;
+    // Margin is computed against the discounted total, not the raw subtotal
+    const totalMarginEur = totalAfterDiscount - totalCost;
+    const avgMarginPercent = totalAfterDiscount !== 0 ? (totalMarginEur / totalAfterDiscount) * 100 : 0;
 
     return { totalCost, totalMarginEur, avgMarginPercent };
-  }, [items, totalEstimated]);
+  }, [items, totalAfterDiscount]);
 
   function buildPayload(): QuoteSavePayload {
+    const gdVal = parseFloat(globalDiscountValue || "0");
+    const globalDiscount = isFinite(gdVal) && gdVal > 0
+      ? { mode: globalDiscountMode, value: gdVal }
+      : undefined;
     return {
       subject: subject || null,
       notes: notes || null,
       number: isNew ? (number || undefined) : undefined,
+      globalDiscount,
       items: items.map((it): QuoteItemPayload => {
         const margin =
           it.marginPercent !== undefined && it.marginPercent !== ""
@@ -1682,6 +1726,14 @@ export default function QuoteEditorPage() {
   }
 
   function buildPdfQuote(q: QuoteResponse): PdfQuote {
+    const gdMode = q.discounts?.globalDiscountMode;
+    const gdVal = gdMode === "percent"
+      ? q.discounts?.globalDiscountPercent
+      : q.discounts?.globalDiscountAmount;
+    const globalDiscount = gdMode && gdVal != null && gdVal > 0
+      ? { mode: gdMode, value: gdVal }
+      : null;
+
     return {
       id: q.id,
       number: q.number,
@@ -1689,6 +1741,7 @@ export default function QuoteEditorPage() {
       notes: q.notes,
       totalAmount: q.totalAmount,
       createdAt: q.createdAt,
+      globalDiscount,
       items: q.items
         .slice()
         .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
@@ -1877,9 +1930,9 @@ export default function QuoteEditorPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[100px]">Tipo</TableHead>
-                      <TableHead>Descrizione</TableHead>
+                      <TableHead className="max-w-xs">Descrizione</TableHead>
                       <TableHead className="w-[80px] text-right">Sconto %</TableHead>
-                      <TableHead className="text-right">Totale</TableHead>
+                      <TableHead className="w-[130px] text-right whitespace-nowrap">Totale</TableHead>
                       <TableHead className="w-[140px] text-right">Azioni</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1906,7 +1959,7 @@ export default function QuoteEditorPage() {
                             className="w-14 h-7 text-right text-sm rounded border border-input bg-transparent px-2 focus:outline-none focus:ring-1 focus:ring-ring"
                           />
                         </TableCell>
-                        <TableCell className="text-right font-medium">
+                        <TableCell className="text-right font-medium whitespace-nowrap">
                           {(() => {
                             const hasDiscount = (it.discountPercent && parseFloat(it.discountPercent) > 0) || (it.overrideTotal != null && it.overrideTotal !== "");
                             const originalTotal = it.baseTotal ? parseFloat(it.baseTotal) : null;
@@ -1982,6 +2035,46 @@ export default function QuoteEditorPage() {
                   </TableBody>
                 </Table>
               )}
+              {/* Global discount panel */}
+              <div className="mt-4 pt-3 border-t" data-testid="global-discount-panel">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Sconto globale</div>
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex rounded-md border border-input overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setGlobalDiscountMode("percent")}
+                      data-testid="toggle-discount-percent"
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${globalDiscountMode === "percent" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted"}`}
+                    >
+                      %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGlobalDiscountMode("euro")}
+                      data-testid="toggle-discount-euro"
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors border-l border-input ${globalDiscountMode === "euro" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted"}`}
+                    >
+                      €
+                    </button>
+                  </div>
+                  <Input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="0"
+                    value={globalDiscountValue}
+                    onChange={(e) => setGlobalDiscountValue(e.target.value)}
+                    className="w-32"
+                    data-testid="input-global-discount"
+                  />
+                  {globalDiscountAmount > 0 && (
+                    <span className="text-sm text-amber-700 dark:text-amber-300 font-medium" data-testid="text-global-discount-amount">
+                      − € {formatEur(globalDiscountAmount)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <div className="mt-4 pt-3 border-t" data-testid="quote-summary-panel">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                   {items.length > 0 && (
@@ -2001,9 +2094,23 @@ export default function QuoteEditorPage() {
                     </div>
                   )}
                   <div className="text-right sm:ml-auto">
-                    <div className="text-xs text-muted-foreground">Totale stimato</div>
+                    {globalDiscountAmount > 0 && (
+                      <>
+                        <div className="text-xs text-muted-foreground">Subtotale</div>
+                        <div className="text-lg text-muted-foreground line-through" data-testid="text-subtotal">
+                          € {formatEur(totalEstimated)}
+                        </div>
+                        <div className="text-xs text-amber-600 dark:text-amber-400" data-testid="text-global-discount-label">
+                          Sconto globale —{" "}
+                          {globalDiscountMode === "percent"
+                            ? `${parseFloat(globalDiscountValue || "0").toFixed(1)}%`
+                            : `€ ${formatEur(parseFloat(globalDiscountValue || "0"))}`}
+                        </div>
+                      </>
+                    )}
+                    <div className="text-xs text-muted-foreground mt-1">Totale stimato</div>
                     <div className="text-2xl font-semibold" data-testid="text-total">
-                      € {formatEur(totalEstimated)}
+                      € {formatEur(totalAfterDiscount)}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       I prezzi vengono ricalcolati e congelati al salvataggio

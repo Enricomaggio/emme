@@ -78,12 +78,28 @@ const quoteItemInputSchema = z.discriminatedUnion("type", [
 ]);
 type QuoteItemInput = z.infer<typeof quoteItemInputSchema>;
 
+const globalDiscountSchema = z.object({
+  mode: z.enum(["percent", "euro"]),
+  value: z.coerce.number().min(0).transform((val, ctx) => {
+    // Clamp percent to valid range; let it pass for euro (UI already clamps to subtotal)
+    return val;
+  }),
+}).optional().transform((gd) => {
+  if (!gd) return gd;
+  // Normalize: percent cannot exceed 100
+  if (gd.mode === "percent" && gd.value > 100) {
+    return { ...gd, value: 100 };
+  }
+  return gd;
+});
+
 const quoteSaveSchema = z.object({
   subject: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   status: z.enum(quoteStatusEnum).optional(),
   number: z.string().min(1).optional(), // only for create
   items: z.array(quoteItemInputSchema).default([]),
+  globalDiscount: globalDiscountSchema,
 });
 
 // ==================== Calculation ====================
@@ -397,7 +413,7 @@ quotesRouter.post("/opportunities/:opportunityId/quotes", isAuthenticated, async
         errors: parsed.error.flatten(),
       });
     }
-    const { subject, notes, status, number, items } = parsed.data;
+    const { subject, notes, status, number, items, globalDiscount } = parsed.data;
 
     // Pre-calcola tutte le righe e congela i prezzi
     const computed: ComputedItem[] = [];
@@ -405,6 +421,16 @@ quotesRouter.post("/opportunities/:opportunityId/quotes", isAuthenticated, async
       computed.push(await computeItem(it));
     }
     const totalAmount = computed.reduce((sum, c) => sum + parseFloat(c.totalRow), 0);
+
+    // Build discounts JSONB with global discount info
+    const discountsData = globalDiscount && globalDiscount.value > 0
+      ? {
+          globalDiscountMode: globalDiscount.mode,
+          ...(globalDiscount.mode === "percent"
+            ? { globalDiscountPercent: globalDiscount.value }
+            : { globalDiscountAmount: globalDiscount.value }),
+        }
+      : null;
 
     let quote;
     try {
@@ -416,6 +442,7 @@ quotesRouter.post("/opportunities/:opportunityId/quotes", isAuthenticated, async
         subject: subject ?? null,
         notes: notes ?? null,
         globalParams: null,
+        discounts: discountsData,
       }, number);
     } catch (e) {
       if (isUniqueConstraintError(e)) {
@@ -466,7 +493,7 @@ quotesRouter.put("/quotes/:id", isAuthenticated, async (req, res) => {
         errors: parsed.error.flatten(),
       });
     }
-    const { subject, notes, status, items } = parsed.data;
+    const { subject, notes, status, items, globalDiscount } = parsed.data;
 
     const computed: ComputedItem[] = [];
     for (const it of items) {
@@ -474,11 +501,22 @@ quotesRouter.put("/quotes/:id", isAuthenticated, async (req, res) => {
     }
     const totalAmount = computed.reduce((sum, c) => sum + parseFloat(c.totalRow), 0);
 
+    // Build discounts JSONB with global discount info
+    const discountsData = globalDiscount && globalDiscount.value > 0
+      ? {
+          globalDiscountMode: globalDiscount.mode,
+          ...(globalDiscount.mode === "percent"
+            ? { globalDiscountPercent: globalDiscount.value }
+            : { globalDiscountAmount: globalDiscount.value }),
+        }
+      : null;
+
     const updated = await storage.updateQuote(existing.id, userCompany.companyId, {
       subject: subject ?? null,
       notes: notes ?? null,
       status: status ?? existing.status,
       totalAmount: String(round2(totalAmount)),
+      discounts: discountsData,
     });
 
     await storage.deleteQuoteItems(existing.id);

@@ -161,9 +161,19 @@ export function QuotePdfActions({ quote, opportunity, opportunityLoading = false
     const customer = leadQuery.data;
     const customerName = customerDisplayName(customer ?? null);
     const persistedTotal = parseFloat(quote.totalAmount || "0");
-    const totalNum = Number.isFinite(persistedTotal) && persistedTotal > 0
+    const rawTotal = Number.isFinite(persistedTotal) && persistedTotal > 0
       ? persistedTotal
       : enrichedQuote.items.reduce((s, it) => s + (parseFloat(it.totalRow) || 0), 0);
+    // Apply global discount so the email total matches the PDF
+    let totalNum = rawTotal;
+    if (quote.globalDiscount && quote.globalDiscount.value > 0) {
+      if (quote.globalDiscount.mode === "percent") {
+        const pct = Math.min(quote.globalDiscount.value, 100);
+        totalNum = Math.max(0, rawTotal - rawTotal * pct / 100);
+      } else {
+        totalNum = Math.max(0, rawTotal - quote.globalDiscount.value);
+      }
+    }
     const vars = {
       numero: quote.number,
       cliente: customerName,

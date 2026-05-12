@@ -141,10 +141,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.rowAlt,
   },
   col: { paddingHorizontal: 2 },
-  colDesc: { flex: 4 },
+  colDesc: { flex: 3 },
   colQty: { flex: 1.2, textAlign: "right" },
   colUnit: { flex: 1.4, textAlign: "right" },
-  colTotal: { flex: 1.4, textAlign: "right", fontFamily: "Helvetica-Bold" },
+  colTotal: { flex: 2, textAlign: "right", fontFamily: "Helvetica-Bold" },
   priceOriginal: {
     fontSize: 7.5,
     color: "#9ca3af",
@@ -394,8 +394,24 @@ export const QuotePdfDocument = ({ company, customer, quote, opportunityTitle, p
           </View>
           {totals.totalDiscount > 0 && (
             <View style={styles.totalsRow}>
-              <Text style={[styles.totalsLabel, { color: COLORS.accent }]}>Sconto totale</Text>
+              <Text style={[styles.totalsLabel, { color: COLORS.accent }]}>Sconto righe</Text>
               <Text style={[styles.totalsValue, { color: COLORS.accent }]}>- € {fmt(totals.totalDiscount)}</Text>
+            </View>
+          )}
+          {totals.globalDiscountAmount > 0 && (
+            <View style={styles.totalsRow}>
+              <Text style={[styles.totalsLabel, { color: COLORS.accent }]}>
+                {quote.globalDiscount?.mode === "percent"
+                  ? `Sconto globale ${quote.globalDiscount.value}%`
+                  : `Sconto globale`}
+              </Text>
+              <Text style={[styles.totalsValue, { color: COLORS.accent }]}>- € {fmt(totals.globalDiscountAmount)}</Text>
+            </View>
+          )}
+          {totals.globalDiscountAmount > 0 && (
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>Subtotale scontato</Text>
+              <Text style={styles.totalsValue}>€ {fmt(totals.subtotalAfterGlobalDiscount)}</Text>
             </View>
           )}
           <View style={styles.totalsRow}>

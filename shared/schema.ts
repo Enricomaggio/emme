@@ -205,7 +205,9 @@ export interface QuotePhaseDiscount {
 export interface QuoteDiscounts {
   itemDiscounts?: QuoteItemDiscount[];  // Sconti per singola voce
   phaseDiscounts?: QuotePhaseDiscount[];  // Sconti per fase (legacy)
-  globalDiscountPercent?: number;  // Sconto globale finale
+  globalDiscountPercent?: number;  // Sconto globale finale (solo percentuale, legacy)
+  globalDiscountAmount?: number;  // Sconto globale fisso in € (quando mode = "euro")
+  globalDiscountMode?: "percent" | "euro";  // Modalità sconto globale
 }
 
 // Tipo per zona movimentazione (logistica cantiere)
