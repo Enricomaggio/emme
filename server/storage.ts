@@ -44,6 +44,7 @@ import {
 import { db } from "./db";
 import { eq, and, desc, or, isNull, gte, lte, sql, inArray, not } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { applyDiscountOrOverride, round2 } from "./utils/quoteCalc";
 
 // Parametri per il controllo accesso basato sui ruoli
 export interface AccessContext {
@@ -203,7 +204,7 @@ export interface IStorage {
   getQuoteItem(id: string, quoteId: string): Promise<QuoteItem | undefined>;
   createQuoteItem(data: InsertQuoteItem): Promise<QuoteItem>;
   createQuoteItems(data: InsertQuoteItem[]): Promise<QuoteItem[]>;
-  updateQuoteItem(id: string, quoteId: string, data: { unitPriceApplied?: string; quantity?: string; totalRow?: string }): Promise<QuoteItem | undefined>;
+  updateQuoteItem(id: string, quoteId: string, data: { unitPriceApplied?: string; quantity?: string; totalRow?: string; baseTotal?: string }): Promise<QuoteItem | undefined>;
   deleteQuoteItems(quoteId: string): Promise<boolean>;
   
   // Project Stages (Fasi workflow progetti)
@@ -1801,11 +1802,47 @@ export class DatabaseStorage implements IStorage {
   async updateQuoteItem(
     id: string, 
     quoteId: string, 
-    data: { unitPriceApplied?: string; quantity?: string; totalRow?: string }
+    data: { unitPriceApplied?: string; quantity?: string; totalRow?: string; baseTotal?: string }
   ): Promise<QuoteItem | undefined> {
+    const { baseTotal, ...rest } = data;
+
+    if (baseTotal !== undefined) {
+      // Re-read existing discount/override from DB and reapply so the user's
+      // discount is preserved after an automatic catalog-price recalculation.
+      const existing = await this.getQuoteItem(id, quoteId);
+      if (!existing) return undefined;
+
+      const newBase = parseFloat(baseTotal);
+      const existingDiscount = existing.discountPercent != null
+        ? parseFloat(existing.discountPercent)
+        : 0;
+      const existingOverride = existing.overrideTotal != null
+        ? parseFloat(existing.overrideTotal)
+        : null;
+
+      const { totalRow, discountPercent, overrideTotal } = applyDiscountOrOverride(
+        newBase,
+        existingDiscount,
+        existingOverride,
+      );
+
+      const [item] = await db
+        .update(quoteItems)
+        .set({
+          ...rest,
+          baseTotal: String(round2(newBase)),
+          totalRow: String(round2(totalRow)),
+          discountPercent: String(round2(discountPercent)),
+          overrideTotal: overrideTotal != null ? String(round2(overrideTotal)) : null,
+        })
+        .where(and(eq(quoteItems.id, id), eq(quoteItems.quoteId, quoteId)))
+        .returning();
+      return item || undefined;
+    }
+
     const [item] = await db
       .update(quoteItems)
-      .set(data)
+      .set(rest)
       .where(and(eq(quoteItems.id, id), eq(quoteItems.quoteId, quoteId)))
       .returning();
     return item || undefined;

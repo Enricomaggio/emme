@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { isAuthenticated, canAccessLeads } from "../auth";
 import { resolveUserCompany } from "../utils/accessContext";
 import { isUniqueConstraintError } from "../utils/errors";
+import { round2, round4, applyDiscountOrOverride } from "../utils/quoteCalc";
 import {
   quoteStatusEnum,
   type QuoteItemType,
@@ -109,31 +110,6 @@ interface ComputedItem {
   laborRateId: string | null;
 }
 
-function round2(n: number): number {
-  if (!isFinite(n)) return 0;
-  return Math.round(n * 100) / 100;
-}
-
-function round4(n: number): number {
-  if (!isFinite(n)) return 0;
-  return Math.round(n * 10000) / 10000;
-}
-
-function applyDiscountOrOverride(
-  baseTotal: number,
-  discountPercent: number | undefined,
-  overrideTotal: number | null | undefined,
-): { totalRow: number; discountPercent: number; overrideTotal: number | null } {
-  const discount = discountPercent ?? 0;
-  if (overrideTotal != null && isFinite(overrideTotal)) {
-    return { totalRow: overrideTotal, discountPercent: discount, overrideTotal };
-  }
-  if (isFinite(discount) && discount > 0) {
-    const discounted = baseTotal * (1 - discount / 100);
-    return { totalRow: discounted, discountPercent: discount, overrideTotal: null };
-  }
-  return { totalRow: baseTotal, discountPercent: 0, overrideTotal: null };
-}
 
 async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
   if (input.type === "LATTONERIA") {
@@ -160,10 +136,16 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
     const meters = Number(input.quantity);
     const thicknessMm = parseFloat(thickness.thicknessMm);
     const density = parseFloat(material.density);
-    const costPerKg = parseFloat(thickness.costPerKg);
+    const isSingleMode = material.priceMode === "SINGLE";
+    const costPerKg = isSingleMode
+      ? parseFloat(material.singleCostPerKg ?? "0")
+      : parseFloat(thickness.costPerKg);
+    const defaultMargin = isSingleMode
+      ? parseFloat(material.singleMarginPercent ?? "0")
+      : parseFloat(thickness.marginPercent);
     const margin = input.marginPercent !== undefined
       ? Number(input.marginPercent)
-      : parseFloat(thickness.marginPercent);
+      : defaultMargin;
 
     // Peso(kg) = (sviluppo_mm/1000) * metri * (spessore_mm/1000) * peso_specifico
     const weightKg = (developmentMm / 1000) * meters * (thicknessMm / 1000) * density;
