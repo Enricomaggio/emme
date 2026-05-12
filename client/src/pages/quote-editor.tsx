@@ -1720,8 +1720,8 @@ export default function QuoteEditorPage() {
       const m = materialsQuery.data?.find((x) => x.id === it.materialId);
       const t = m?.thicknesses?.find((x) => x.id === it.materialThicknessId) as MaterialThicknessWithFinishes | undefined;
       const f = it.materialFinishId ? t?.finishes?.find((x) => x.id === it.materialFinishId) : undefined;
-      const desc = it.description ||
-        (m && t ? `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}` : "Lattoneria");
+      const computedName = m && t ? `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}` : null;
+      const desc = computedName || it.description || "Lattoneria";
       const costSuffix = it.unitCostPerKg
         ? ` — ${formatEur(parseFloat(it.unitCostPerKg))} €/kg`
         : "";

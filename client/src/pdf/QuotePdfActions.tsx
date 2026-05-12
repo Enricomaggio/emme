@@ -78,7 +78,12 @@ export function QuotePdfActions({ quote, opportunity, opportunityLoading = false
       ...quote,
       items: quote.items.map((it) => ({
         ...it,
-        resolvedName: it.description || resolveItemName(it.id) || "",
+        // For LATTONERIA: prefer the resolved catalog name (which always includes the
+        // chosen finish) over the stored description text which may pre-date the finish
+        // feature. For all other types: honour any custom description the user entered.
+        resolvedName: it.type === "LATTONERIA"
+          ? (resolveItemName(it.id) || it.description || "")
+          : (it.description || resolveItemName(it.id) || ""),
       })),
     };
   }, [quote, resolveItemName]);
