@@ -16,6 +16,7 @@ import {
   Save,
   Loader2,
   Pencil,
+  ChevronDown,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { QuotePdfActions } from "@/pdf/QuotePdfActions";
@@ -56,6 +57,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
@@ -341,13 +347,13 @@ function AddRowDialog({ open, onClose, onAdd, materials, articleFamilies, laborR
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg" data-testid="dialog-add-row">
-        <DialogHeader>
+      <DialogContent className="max-w-lg flex flex-col max-h-[90vh]" data-testid="dialog-add-row">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Aggiungi riga al preventivo</DialogTitle>
           <DialogDescription>Scegli il tipo di voce da inserire</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
+        <div className="space-y-2 shrink-0">
           <Label>Tipo riga</Label>
           <Select value={type} onValueChange={(v) => setType(v as QuoteItemType)}>
             <SelectTrigger data-testid="select-row-type">
@@ -399,8 +405,8 @@ function EditRowDialog({ item, onClose, onUpdate, materials, articleFamilies, la
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg" data-testid="dialog-edit-row">
-        <DialogHeader>
+      <DialogContent className="max-w-lg flex flex-col max-h-[90vh]" data-testid="dialog-edit-row">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Modifica riga del preventivo</DialogTitle>
           <DialogDescription>Aggiorna i campi e salva per ricalcolare il prezzo</DialogDescription>
         </DialogHeader>
@@ -569,9 +575,12 @@ function LattoneriaForm({
     });
   });
 
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   return (
     <Form {...form}>
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={submit} className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         <FormField
           control={form.control}
           name="materialId"
@@ -580,7 +589,7 @@ function LattoneriaForm({
               <FormLabel>Materiale</FormLabel>
               <Select value={field.value} onValueChange={field.onChange}>
                 <FormControl>
-                  <SelectTrigger data-testid="select-material">
+                  <SelectTrigger data-testid="select-material" autoFocus>
                     <SelectValue placeholder="Seleziona materiale" />
                   </SelectTrigger>
                 </FormControl>
@@ -686,70 +695,70 @@ function LattoneriaForm({
             )}
           />
         </div>
-        <FormField
-          control={form.control}
-          name="marginPercent"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Margine % (opzionale, default da catalogo)</FormLabel>
-              <FormControl>
-                <Input
-                  type="number"
-                  step="any"
-                  placeholder={
-                    isSingle && selectedMaterial
-                      ? parseFloat(String(selectedMaterial.singleMarginPercent ?? "0")).toString()
-                      : selectedThickness
-                        ? parseFloat(String(selectedThickness.marginPercent ?? "0")).toString()
-                        : ""
-                  }
-                  {...field}
-                  data-testid="input-margin-override"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Descrizione (opzionale)</FormLabel>
-              <FormControl>
-                <Input {...field} data-testid="input-description" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         {preview && (
-          <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1" data-testid="preview-lattoneria">
-            <div>
-              Costo unitario:{" "}
-              <span className="font-medium" data-testid="preview-unit-cost-per-kg">
-                {(() => {
-                  const costKg = isSingle
-                    ? parseFloat(String(selectedMaterial?.singleCostPerKg ?? "0"))
-                    : parseFloat(String(selectedThickness?.costPerKg ?? "0"));
-                  return `${formatEur(costKg)} €/kg`;
-                })()}
-              </span>
-              {isSingle && (
-                <span className="ml-1 text-xs text-muted-foreground">(prezzo unico materiale)</span>
-              )}
-            </div>
-            <div>Peso stimato: <span className="font-medium">{preview.weightKg.toFixed(2)} kg</span></div>
-            <div>Costo: <span className="font-medium">€ {formatEur(preview.cost)}</span></div>
-            <div>Margine applicato: <span className="font-medium">{preview.margin.toFixed(2)}%</span></div>
-            <div className="pt-1 border-t">
-              Prezzo totale riga: <span className="font-semibold">€ {formatEur(preview.total)}</span>
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground" data-testid="preview-lattoneria">
+            Peso: <span className="font-medium text-foreground">{preview.weightKg.toFixed(2)} kg</span>
+            {" · "}Costo: <span className="font-medium text-foreground">€ {formatEur(preview.cost)}</span>
+            {" · "}Totale: <span className="font-semibold text-foreground">€ {formatEur(preview.total)}</span>
+            {" "}
+            <span className="text-muted-foreground">({preview.margin.toFixed(1)}%)</span>
+          </p>
         )}
-        <DiscountFields form={form} baseTotal={preview?.total ?? null} />
-        <DialogFooter>
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="toggle-advanced-lattoneria"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+              {advancedOpen ? "Nascondi opzioni avanzate" : "+ Opzioni avanzate"}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-3">
+            <FormField
+              control={form.control}
+              name="marginPercent"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Margine % (opzionale, default da catalogo)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder={
+                        isSingle && selectedMaterial
+                          ? parseFloat(String(selectedMaterial.singleMarginPercent ?? "0")).toString()
+                          : selectedThickness
+                            ? parseFloat(String(selectedThickness.marginPercent ?? "0")).toString()
+                            : ""
+                      }
+                      {...field}
+                      data-testid="input-margin-override"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Descrizione (opzionale)</FormLabel>
+                  <FormControl>
+                    <Input {...field} data-testid="input-description" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DiscountFields form={form} baseTotal={preview?.total ?? null} />
+          </CollapsibleContent>
+        </Collapsible>
+        </div>
+        <DialogFooter className="shrink-0 pt-3 border-t mt-1">
           <Button type="submit" data-testid={submitTestId}>
             {initial ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
             {submitLabel}
@@ -853,14 +862,17 @@ function ArticoloForm({
     });
   });
 
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   return (
     <Form {...form}>
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={submit} className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {/* Step 1: Select Family */}
         <div className="space-y-1">
           <label className="text-sm font-medium">Famiglia articoli</label>
           <Select value={selectedFamilyId} onValueChange={setSelectedFamilyId}>
-            <SelectTrigger data-testid="select-article-family">
+            <SelectTrigger data-testid="select-article-family" autoFocus>
               <SelectValue placeholder="Seleziona famiglia" />
             </SelectTrigger>
             <SelectContent>
@@ -914,49 +926,63 @@ function ArticoloForm({
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="marginPercent"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Margine % (opzionale, default da catalogo)</FormLabel>
-              <FormControl>
-                <Input
-                  type="number"
-                  step="any"
-                  placeholder={selectedVariant ? parseFloat(selectedVariant.marginPercent).toString() : ""}
-                  {...field}
-                  data-testid="input-margin-override-articolo"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Descrizione (opzionale)</FormLabel>
-              <FormControl>
-                <Input {...field} data-testid="input-description-articolo" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         {preview && (
-          <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1" data-testid="preview-articolo">
-            <div>Costo: <span className="font-medium">€ {formatEur(preview.cost)}</span></div>
-            <div>Margine: <span className="font-medium">{preview.margin.toFixed(2)}%</span></div>
-            <div className="pt-1 border-t">
-              Prezzo totale riga: <span className="font-semibold">€ {formatEur(preview.total)}</span>
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground" data-testid="preview-articolo">
+            Costo: <span className="font-medium text-foreground">€ {formatEur(preview.cost)}</span>
+            {" · "}Totale: <span className="font-semibold text-foreground">€ {formatEur(preview.total)}</span>
+            {" "}
+            <span className="text-muted-foreground">({preview.margin.toFixed(1)}%)</span>
+          </p>
         )}
-        <DiscountFields form={form} baseTotal={preview?.total ?? null} />
-        <DialogFooter>
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="toggle-advanced-articolo"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+              {advancedOpen ? "Nascondi opzioni avanzate" : "+ Opzioni avanzate"}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-3">
+            <FormField
+              control={form.control}
+              name="marginPercent"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Margine % (opzionale, default da catalogo)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder={selectedVariant ? parseFloat(selectedVariant.marginPercent).toString() : ""}
+                      {...field}
+                      data-testid="input-margin-override-articolo"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Descrizione (opzionale)</FormLabel>
+                  <FormControl>
+                    <Input {...field} data-testid="input-description-articolo" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DiscountFields form={form} baseTotal={preview?.total ?? null} />
+          </CollapsibleContent>
+        </Collapsible>
+        </div>
+        <DialogFooter className="shrink-0 pt-3 border-t mt-1">
           <Button type="submit" data-testid={submitTestId}>
             {initial ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
             {submitLabel}
@@ -1040,9 +1066,12 @@ function GiornateForm({
     });
   });
 
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   return (
     <Form {...form}>
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={submit} className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         <FormField
           control={form.control}
           name="laborRateId"
@@ -1051,7 +1080,7 @@ function GiornateForm({
               <FormLabel>Manodopera</FormLabel>
               <Select value={field.value} onValueChange={field.onChange}>
                 <FormControl>
-                  <SelectTrigger data-testid="select-labor-rate">
+                  <SelectTrigger data-testid="select-labor-rate" autoFocus>
                     <SelectValue placeholder="Seleziona voce manodopera" />
                   </SelectTrigger>
                 </FormControl>
@@ -1080,49 +1109,63 @@ function GiornateForm({
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="marginPercent"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Margine % (opzionale, default da catalogo)</FormLabel>
-              <FormControl>
-                <Input
-                  type="number"
-                  step="any"
-                  placeholder={selected ? parseFloat(selected.marginPercent).toString() : ""}
-                  {...field}
-                  data-testid="input-margin-override-giornate"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Descrizione (opzionale)</FormLabel>
-              <FormControl>
-                <Input {...field} data-testid="input-description-giornate" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         {preview && (
-          <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1" data-testid="preview-giornate">
-            <div>Costo: <span className="font-medium">€ {formatEur(preview.cost)}</span></div>
-            <div>Margine: <span className="font-medium">{preview.margin.toFixed(2)}%</span></div>
-            <div className="pt-1 border-t">
-              Prezzo totale riga: <span className="font-semibold">€ {formatEur(preview.total)}</span>
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground" data-testid="preview-giornate">
+            Costo: <span className="font-medium text-foreground">€ {formatEur(preview.cost)}</span>
+            {" · "}Totale: <span className="font-semibold text-foreground">€ {formatEur(preview.total)}</span>
+            {" "}
+            <span className="text-muted-foreground">({preview.margin.toFixed(1)}%)</span>
+          </p>
         )}
-        <DiscountFields form={form} baseTotal={preview?.total ?? null} />
-        <DialogFooter>
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="toggle-advanced-giornate"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+              {advancedOpen ? "Nascondi opzioni avanzate" : "+ Opzioni avanzate"}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-3">
+            <FormField
+              control={form.control}
+              name="marginPercent"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Margine % (opzionale, default da catalogo)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder={selected ? parseFloat(selected.marginPercent).toString() : ""}
+                      {...field}
+                      data-testid="input-margin-override-giornate"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Descrizione (opzionale)</FormLabel>
+                  <FormControl>
+                    <Input {...field} data-testid="input-description-giornate" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DiscountFields form={form} baseTotal={preview?.total ?? null} />
+          </CollapsibleContent>
+        </Collapsible>
+        </div>
+        <DialogFooter className="shrink-0 pt-3 border-t mt-1">
           <Button type="submit" data-testid={submitTestId}>
             {initial ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
             {submitLabel}
