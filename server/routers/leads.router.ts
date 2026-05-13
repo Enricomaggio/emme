@@ -12,6 +12,7 @@ import {
   reminders as remindersTable,
   insertLeadSchema,
   insertLeadSourceSchema,
+  insertContactReferentSchema,
 } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
@@ -774,8 +775,13 @@ leadsRouter.post("/leads/:id/referents", isAuthenticated, async (req, res) => {
       return res.status(404).json({ message: "Contatto non trovato" });
     }
 
+    const parsed = insertContactReferentSchema.omit({ contactId: true }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Dati referente non validi", errors: parsed.error.flatten() });
+    }
+
     const referent = await storage.createReferent({
-      ...req.body,
+      ...parsed.data,
       contactId: req.params.id,
     });
 
@@ -789,13 +795,33 @@ leadsRouter.post("/leads/:id/referents", isAuthenticated, async (req, res) => {
 // PATCH /api/referents/:id - Aggiorna referente
 leadsRouter.patch("/referents/:id", isAuthenticated, async (req, res) => {
   try {
-    const { role } = req.user!;
+    const { id: userId, role } = req.user!;
 
     if (!canAccessLeads(role)) {
       return res.status(403).json({ message: "Accesso negato" });
     }
 
-    const referent = await storage.updateReferent(req.params.id, req.body);
+    const userCompany = await resolveUserCompany(userId, role, req);
+    if (!userCompany) {
+      return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+    }
+
+    const existing = await storage.getReferent(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ message: "Referente non trovato" });
+    }
+
+    const lead = await storage.getLead(existing.contactId, userCompany.companyId);
+    if (!lead) {
+      return res.status(404).json({ message: "Referente non trovato" });
+    }
+
+    const parsed = insertContactReferentSchema.omit({ contactId: true }).partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Dati referente non validi", errors: parsed.error.flatten() });
+    }
+
+    const referent = await storage.updateReferent(req.params.id, parsed.data);
     if (!referent) {
       return res.status(404).json({ message: "Referente non trovato" });
     }
@@ -810,10 +836,25 @@ leadsRouter.patch("/referents/:id", isAuthenticated, async (req, res) => {
 // DELETE /api/referents/:id - Elimina referente
 leadsRouter.delete("/referents/:id", isAuthenticated, async (req, res) => {
   try {
-    const { role } = req.user!;
+    const { id: userId, role } = req.user!;
 
     if (!canAccessLeads(role)) {
       return res.status(403).json({ message: "Accesso negato" });
+    }
+
+    const userCompany = await resolveUserCompany(userId, role, req);
+    if (!userCompany) {
+      return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+    }
+
+    const existing = await storage.getReferent(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ message: "Referente non trovato" });
+    }
+
+    const lead = await storage.getLead(existing.contactId, userCompany.companyId);
+    if (!lead) {
+      return res.status(404).json({ message: "Referente non trovato" });
     }
 
     const deleted = await storage.deleteReferent(req.params.id);

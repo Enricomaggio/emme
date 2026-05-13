@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { storage } from "../storage";
-import { isAuthenticated, canAccessLeads } from "../auth";
+import { isAuthenticated, canAccessLeads, isAdmin } from "../auth";
 import { insertOpportunitySchema, type InsertOpportunity, type InsertQuoteItem } from "@shared/schema";
 import { z } from "zod";
-import { resolveUserCompany, buildAccessContext } from "../utils/accessContext";
+import { resolveUserCompany, buildAccessContext, validateUserInSameCompany } from "../utils/accessContext";
 import { isUniqueConstraintError } from "../utils/errors";
 
 export const opportunitiesRouter = Router();
@@ -241,6 +241,16 @@ opportunitiesRouter.post("/opportunities", isAuthenticated, async (req, res) => 
     const validationSchema = insertOpportunitySchema.omit({ companyId: true, wonAt: true, lostAt: true, quoteSentAt: true, quoteReminderSnoozedUntil: true });
     const validatedData = validationSchema.parse(req.body);
 
+    if (!isAdmin(role) && "assignedToUserId" in validatedData) {
+      delete (validatedData as Record<string, unknown>).assignedToUserId;
+    }
+    if (validatedData.assignedToUserId) {
+      const sameCompany = await validateUserInSameCompany(validatedData.assignedToUserId, userCompany.companyId);
+      if (!sameCompany) {
+        return res.status(400).json({ message: "Utente assegnatario non appartiene alla stessa azienda" });
+      }
+    }
+
     // Verifica che il lead esista e appartenga alla stessa azienda
     const lead = await storage.getLead(validatedData.leadId, userCompany.companyId);
     if (!lead) {
@@ -314,6 +324,20 @@ opportunitiesRouter.patch("/opportunities/:id", isAuthenticated, async (req, res
 
     const validationSchema = insertOpportunitySchema.omit({ companyId: true, wonAt: true, lostAt: true, quoteSentAt: true, quoteReminderSnoozedUntil: true }).partial();
     const validatedData = validationSchema.parse(body);
+
+    // Only admins can change the assignee. Strip it from the payload otherwise
+    // so a SALES_AGENT can't reassign opportunities (his own or others').
+    if (!isAdmin(role) && "assignedToUserId" in validatedData) {
+      delete (validatedData as Record<string, unknown>).assignedToUserId;
+    }
+    // If an admin is (re)assigning, make sure the target user belongs to the
+    // same company — prevents cross-tenant assignment via crafted payload.
+    if (validatedData.assignedToUserId) {
+      const sameCompany = await validateUserInSameCompany(validatedData.assignedToUserId, userCompany.companyId);
+      if (!sameCompany) {
+        return res.status(400).json({ message: "Utente assegnatario non appartiene alla stessa azienda" });
+      }
+    }
 
     // Verifica che lo stage esista se viene aggiornato
     let patchStage: { name: string } | null = null;

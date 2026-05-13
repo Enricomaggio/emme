@@ -669,8 +669,8 @@ export const quoteItems = pgTable("quote_items", {
   description: text("description"),
   unitOfMeasure: text("unit_of_measure"),
 
-  // Per righe LATTONERIA: sviluppo in mm
-  developmentMm: numeric("development_mm"),
+  // Per righe LATTONERIA: sviluppo in cm
+  developmentCm: numeric("development_cm"),
 
   // Quantità: metri lineari (LATTONERIA), unità (ARTICOLO), giorni (GIORNATE)
   quantity: numeric("quantity").notNull().default("0"),

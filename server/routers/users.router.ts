@@ -296,7 +296,11 @@ usersRouter.post("/users/invite", isAuthenticated, async (req, res) => {
       token,
       expiresAt,
     });
-    const baseUrl = req.headers.origin || `${req.protocol}://${req.headers.host}`;
+    // The invite link must NOT come from the client-controlled Origin header
+    // (an attacker could craft a request with Origin: https://evil.com and
+    // phish the invited user). Prefer a server-configured APP_URL; fall back
+    // to the request's Host as a best effort in dev.
+    const baseUrl = process.env.APP_URL || `${req.protocol}://${req.headers.host}`;
     const inviteLink = `${baseUrl}/join?token=${token}`;
     res.status(201).json({
       invite: {

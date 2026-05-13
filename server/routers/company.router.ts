@@ -2,6 +2,7 @@ import { Router } from "express";
 import { storage } from "../storage";
 import { resolveUserCompany } from "../utils/accessContext";
 import { isAuthenticated, requireRole, getUserByEmail, sanitizeUser } from "../auth";
+import { insertBillingProfileSchema } from "@shared/schema";
 import { z } from "zod";
 
 export const companyRouter = Router();
@@ -31,7 +32,9 @@ companyRouter.post("/admin/companies", isAuthenticated, requireRole("SUPER_ADMIN
       adminFirstName: z.string().min(1, "Nome admin obbligatorio"),
       adminLastName: z.string().min(1, "Cognome admin obbligatorio"),
       adminEmail: z.string().email("Email admin non valida"),
-      adminPassword: z.string().min(6, "Password deve avere almeno 6 caratteri"),
+      adminPassword: z.string()
+        .min(8, "La password deve avere almeno 8 caratteri")
+        .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "La password deve contenere almeno una maiuscola, una minuscola e un numero"),
     });
 
     const validatedData = createCompanySchema.parse(req.body);
@@ -375,11 +378,18 @@ companyRouter.post("/billing-profiles", isAuthenticated, async (req, res) => {
     if (role !== "SUPER_ADMIN" && role !== "COMPANY_ADMIN") {
       return res.status(403).json({ message: "Non autorizzato" });
     }
-    const existing = await storage.getBillingProfileByType(userCompany.companyId, req.body.profileType);
-    if (existing) {
-      return res.status(409).json({ message: `Profilo ${req.body.profileType} già esistente. Utilizzare PUT per aggiornarlo.` });
+    const parsed = insertBillingProfileSchema
+      .omit({ companyId: true })
+      .extend({ profileType: z.enum(["PRIVATE", "PUBLIC"]) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Dati profilo fatturazione non validi", errors: parsed.error.flatten() });
     }
-    const profile = await storage.createBillingProfile({ ...req.body, companyId: userCompany.companyId });
+    const existing = await storage.getBillingProfileByType(userCompany.companyId, parsed.data.profileType);
+    if (existing) {
+      return res.status(409).json({ message: `Profilo ${parsed.data.profileType} già esistente. Utilizzare PUT per aggiornarlo.` });
+    }
+    const profile = await storage.createBillingProfile({ ...parsed.data, companyId: userCompany.companyId });
     res.status(201).json(profile);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -395,7 +405,15 @@ companyRouter.put("/billing-profiles/:id", isAuthenticated, async (req, res) => 
     if (role !== "SUPER_ADMIN" && role !== "COMPANY_ADMIN") {
       return res.status(403).json({ message: "Non autorizzato" });
     }
-    const profile = await storage.updateBillingProfile(req.params.id, userCompany.companyId, req.body);
+    const parsed = insertBillingProfileSchema
+      .omit({ companyId: true })
+      .extend({ profileType: z.enum(["PRIVATE", "PUBLIC"]) })
+      .partial()
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Dati profilo fatturazione non validi", errors: parsed.error.flatten() });
+    }
+    const profile = await storage.updateBillingProfile(req.params.id, userCompany.companyId, parsed.data);
     if (!profile) return res.status(404).json({ message: "Profilo non trovato" });
     res.json(profile);
   } catch (error: any) {

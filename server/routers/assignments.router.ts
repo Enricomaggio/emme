@@ -393,6 +393,10 @@ assignmentsRouter.patch("/assignments/:id", isAuthenticated, requireProxitLock, 
       .limit(1);
     const prev = prevRows[0] ?? null;
     const updateData: any = { ...req.body };
+    delete updateData.id;
+    delete updateData.companyId;
+    delete updateData.createdAt;
+    delete updateData.updatedAt;
     if (updateData.date) updateData.date = new Date(updateData.date);
     if (updateData.endDate && updateData.endDate !== "") {
       updateData.endDate = new Date(updateData.endDate);

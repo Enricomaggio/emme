@@ -5,7 +5,7 @@ export interface PdfQuoteItem {
   type: QuoteItemType | null;
   description: string | null;
   unitOfMeasure: string | null;
-  developmentMm: string | null;
+  developmentCm: string | null;
   quantity: string;
   unitPriceApplied: string;
   totalRow: string;
@@ -88,10 +88,10 @@ function fmtMeasure(n: number | string | null | undefined): string {
 
 export function buildItemDescription(it: PdfQuoteItem): string {
   const base = it.resolvedName || it.description || "";
-  if (it.type === "LATTONERIA" && it.developmentMm) {
-    const dev = parseFloat(it.developmentMm);
+  if (it.type === "LATTONERIA" && it.developmentCm) {
+    const dev = parseFloat(it.developmentCm);
     if (isFinite(dev) && dev > 0) {
-      return `${base}${base ? " — " : ""}sviluppo ${fmtMeasure(dev)} mm`;
+      return `${base}${base ? " — " : ""}sviluppo ${fmtMeasure(dev)} cm`;
     }
   }
   return base || "—";

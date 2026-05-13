@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm, type UseFormReturn } from "react-hook-form";
@@ -91,7 +91,7 @@ interface QuoteItemDraft {
   materialId?: string;
   materialThicknessId?: string;
   materialFinishId?: string;
-  developmentMm?: string;
+  developmentCm?: string;
   // ARTICOLO
   catalogArticleId?: string;
   // GIORNATE
@@ -125,7 +125,7 @@ type QuoteItemPayload =
       materialId: string;
       materialThicknessId: string;
       materialFinishId?: string;
-      developmentMm: string;
+      developmentCm: string;
     }
   | {
       type: "ARTICOLO";
@@ -188,7 +188,7 @@ interface QuoteResponse {
     laborRateId: string | null;
     description: string | null;
     unitOfMeasure: string | null;
-    developmentMm: string | null;
+    developmentCm: string | null;
     quantity: string;
     unitCost: string | null;
     weightKg: string | null;
@@ -288,15 +288,29 @@ function DiscountFields<T extends WithDiscountFields>({ form, baseTotal }: { for
 // ==================== Type-specific add forms ====================
 
 const discountFields = {
-  discountPercent: z.string().optional(),
-  overrideTotal: z.string().optional(),
+  discountPercent: z.string().optional().refine(
+    (v) => {
+      if (!v) return true;
+      const n = parseFloat(v);
+      return !isNaN(n) && n >= 0 && n <= 100;
+    },
+    { message: "Sconto: numero tra 0 e 100" },
+  ),
+  overrideTotal: z.string().optional().refine(
+    (v) => {
+      if (!v) return true;
+      const n = parseFloat(v);
+      return !isNaN(n) && n >= 0;
+    },
+    { message: "Importo: numero ≥ 0" },
+  ),
 };
 
 const lattoneriaFormSchema = z.object({
   materialId: z.string().min(1, "Seleziona un materiale"),
   materialThicknessId: z.string().min(1, "Seleziona uno spessore"),
   materialFinishId: z.string().optional(),
-  developmentMm: z.string().refine((v) => parseFloat(v) > 0, { message: "Sviluppo > 0" }),
+  developmentCm: z.string().refine((v) => parseFloat(v) > 0, { message: "Sviluppo > 0" }),
   quantity: z.string().refine((v) => parseFloat(v) > 0, { message: "Metri > 0" }),
   description: z.string().optional(),
   marginPercent: z.string().optional(),
@@ -480,7 +494,7 @@ function LattoneriaForm({
       materialId: initial?.materialId ?? "",
       materialThicknessId: initial?.materialThicknessId ?? "",
       materialFinishId: initial?.materialFinishId ?? "",
-      developmentMm: initial?.developmentMm ?? "",
+      developmentCm: initial?.developmentCm ?? "",
       quantity: initial?.quantity ?? "",
       description: initial?.description ?? "",
       marginPercent: initial?.marginPercent ?? "",
@@ -492,7 +506,7 @@ function LattoneriaForm({
   const selectedMaterialId = form.watch("materialId");
   const selectedThicknessId = form.watch("materialThicknessId");
   const selectedFinishId = form.watch("materialFinishId");
-  const developmentMm = form.watch("developmentMm");
+  const developmentCm = form.watch("developmentCm");
   const quantity = form.watch("quantity");
   const marginOverride = form.watch("marginPercent");
 
@@ -527,7 +541,7 @@ function LattoneriaForm({
 
   const preview = useMemo(() => {
     if (!selectedMaterial || !selectedThickness) return null;
-    const dev = parseFloat(developmentMm || "0");
+    const dev = parseFloat(developmentCm || "0");
     const meters = parseFloat(quantity || "0");
     const thickMm = parseFloat(selectedThickness.thicknessMm);
     const density = parseFloat(selectedMaterial.density);
@@ -546,7 +560,7 @@ function LattoneriaForm({
     const cost = weightKg * costKg;
     const total = cost * (1 + (isFinite(margin) ? margin : 0) / 100);
     return { weightKg, cost, total, margin: isFinite(margin) ? margin : 0 };
-  }, [selectedMaterial, selectedThickness, developmentMm, quantity, marginOverride, isSingle]);
+  }, [selectedMaterial, selectedThickness, developmentCm, quantity, marginOverride, isSingle]);
 
   const submit = form.handleSubmit((vals) => {
     const discountPct = vals.discountPercent && parseFloat(vals.discountPercent) > 0
@@ -568,7 +582,7 @@ function LattoneriaForm({
       materialId: vals.materialId,
       materialThicknessId: vals.materialThicknessId,
       materialFinishId: vals.materialFinishId || undefined,
-      developmentMm: vals.developmentMm,
+      developmentCm: vals.developmentCm,
       quantity: vals.quantity,
       marginPercent: vals.marginPercent || undefined,
       discountPercent: discountPct > 0 ? String(discountPct) : undefined,
@@ -676,12 +690,12 @@ function LattoneriaForm({
         <div className="grid grid-cols-2 gap-3">
           <FormField
             control={form.control}
-            name="developmentMm"
+            name="developmentCm"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Sviluppo (cm)</FormLabel>
                 <FormControl>
-                  <Input type="number" step="any" {...field} data-testid="input-development-mm" />
+                  <Input type="number" step="any" {...field} data-testid="input-development-cm" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -1377,10 +1391,13 @@ export default function QuoteEditorPage() {
     enabled: !!quoteId,
   });
 
-  // Next number (create mode)
+  // Next number (create mode). staleTime:0 so a freshly-opened editor always
+  // refetches and shows the latest "preview" number, reducing the chance of
+  // two concurrent tabs both displaying the same pre-save value.
   const nextNumberQuery = useQuery<{ number: string }>({
     queryKey: ["/api/quotes/next-number"],
     enabled: isNew,
+    staleTime: 0,
   });
 
   // Opportunity for header (loaded once we know the opportunityId)
@@ -1447,7 +1464,7 @@ export default function QuoteEditorPage() {
           materialId: i.materialId || undefined,
           materialThicknessId: i.materialThicknessId || undefined,
           materialFinishId: i.materialFinishId || undefined,
-          developmentMm: i.developmentMm || undefined,
+          developmentCm: i.developmentCm || undefined,
           catalogArticleId: i.catalogArticleId || undefined,
           laborRateId: i.laborRateId || undefined,
           unitCost: i.type === "MANUALE" ? (i.unitCost || "0") : undefined,
@@ -1465,15 +1482,17 @@ export default function QuoteEditorPage() {
       });
   }
 
-  // Hydrate state from loaded quote
+  // Hydrate state from loaded quote — only once per quoteId, so refetches
+  // (window-focus, polling) don't overwrite the user's unsaved edits.
+  const hydratedQuoteIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!quoteQuery.data) return;
+    if (!quoteQuery.data || !quoteId) return;
+    if (hydratedQuoteIdRef.current === quoteId) return;
     const q = quoteQuery.data;
     setSubject(q.subject || "");
     setNotes(q.notes || "");
     setNumber(q.number);
     setItems(hydrateItemsFromResponse(q.items || []));
-    // Hydrate global discount
     if (q.discounts?.globalDiscountMode) {
       setGlobalDiscountMode(q.discounts.globalDiscountMode);
       const val = q.discounts.globalDiscountMode === "percent"
@@ -1484,7 +1503,8 @@ export default function QuoteEditorPage() {
       setGlobalDiscountMode("percent");
       setGlobalDiscountValue("");
     }
-  }, [quoteQuery.data]);
+    hydratedQuoteIdRef.current = quoteId;
+  }, [quoteQuery.data, quoteId]);
 
   // Hydrate next number for new quotes
   useEffect(() => {
@@ -1558,7 +1578,7 @@ export default function QuoteEditorPage() {
             materialId: it.materialId ?? "",
             materialThicknessId: it.materialThicknessId ?? "",
             materialFinishId: it.materialFinishId || undefined,
-            developmentMm: it.developmentMm ?? "",
+            developmentCm: it.developmentCm ?? "",
           };
         }
         if (it.type === "ARTICOLO") {
@@ -1750,7 +1770,7 @@ export default function QuoteEditorPage() {
           type: it.type,
           description: it.description,
           unitOfMeasure: it.unitOfMeasure,
-          developmentMm: it.developmentMm,
+          developmentCm: it.developmentCm,
           quantity: it.quantity,
           unitPriceApplied: it.unitPriceApplied,
           totalRow: it.totalRow,
@@ -1778,7 +1798,7 @@ export default function QuoteEditorPage() {
       const costSuffix = it.unitCostPerKg
         ? ` — ${formatEur(parseFloat(it.unitCostPerKg))} €/kg`
         : "";
-      return `${desc} — sviluppo ${it.developmentMm ? fmtQty(it.developmentMm) : "?"}cm × ${fmtQty(it.quantity)} ml${costSuffix}`;
+      return `${desc} — sviluppo ${it.developmentCm ? fmtQty(it.developmentCm) : "?"} cm × ${fmtQty(it.quantity)} ml${costSuffix}`;
     }
     if (it.type === "ARTICOLO") {
       let variantName: string | undefined;

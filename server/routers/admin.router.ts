@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { storage } from "../storage";
 import { resolveUserCompany } from "../utils/accessContext";
-import { isAuthenticated } from "../auth";
+import { isAuthenticated, requireRole } from "../auth";
 import { db } from "../db";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import {
@@ -32,7 +32,7 @@ adminRouter.get("/workers", isAuthenticated, async (req, res) => {
   }
 });
 
-adminRouter.post("/workers", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.post("/workers", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
     const userCompany = await resolveUserCompany(userId, role, req);
@@ -56,7 +56,7 @@ adminRouter.post("/workers", isAuthenticated, requireProxitLock, async (req, res
   }
 });
 
-adminRouter.patch("/workers/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.patch("/workers/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
     const userCompany = await resolveUserCompany(userId, role, req);
@@ -80,7 +80,7 @@ adminRouter.patch("/workers/:id", isAuthenticated, requireProxitLock, async (req
   }
 });
 
-adminRouter.post("/workers/reorder", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.post("/workers/reorder", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
     const userCompany = await resolveUserCompany(userId, role, req);
@@ -110,7 +110,7 @@ adminRouter.post("/workers/reorder", isAuthenticated, requireProxitLock, async (
   }
 });
 
-adminRouter.delete("/workers/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.delete("/workers/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
     const userCompany = await resolveUserCompany(userId, role, req);
@@ -263,7 +263,7 @@ adminRouter.get("/teams", isAuthenticated, async (req, res) => {
   }
 });
 
-adminRouter.post("/teams", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.post("/teams", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
 
@@ -279,7 +279,7 @@ adminRouter.post("/teams", isAuthenticated, requireProxitLock, async (req, res) 
   }
 });
 
-adminRouter.patch("/teams/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.patch("/teams/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
 
@@ -298,7 +298,7 @@ adminRouter.patch("/teams/:id", isAuthenticated, requireProxitLock, async (req, 
   }
 });
 
-adminRouter.delete("/teams/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.delete("/teams/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
 
@@ -333,7 +333,7 @@ adminRouter.get("/team-members", isAuthenticated, async (req, res) => {
   }
 });
 
-adminRouter.post("/team-members", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.post("/team-members", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
     const userCompany = await resolveUserCompany(userId, role, req);
@@ -350,7 +350,7 @@ adminRouter.post("/team-members", isAuthenticated, requireProxitLock, async (req
   }
 });
 
-adminRouter.patch("/team-members/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.patch("/team-members/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
     const userCompany = await resolveUserCompany(userId, role, req);
@@ -368,7 +368,7 @@ adminRouter.patch("/team-members/:id", isAuthenticated, requireProxitLock, async
   }
 });
 
-adminRouter.delete("/team-members/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.delete("/team-members/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
     const userCompany = await resolveUserCompany(userId, role, req);
@@ -398,7 +398,7 @@ adminRouter.get("/drivers", isAuthenticated, async (req, res) => {
   }
 });
 
-adminRouter.post("/drivers", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.post("/drivers", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
 
@@ -414,7 +414,7 @@ adminRouter.post("/drivers", isAuthenticated, requireProxitLock, async (req, res
   }
 });
 
-adminRouter.patch("/drivers/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.patch("/drivers/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
 
@@ -429,7 +429,7 @@ adminRouter.patch("/drivers/:id", isAuthenticated, requireProxitLock, async (req
   }
 });
 
-adminRouter.delete("/drivers/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.delete("/drivers/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
 
@@ -460,7 +460,7 @@ adminRouter.get("/vehicles", isAuthenticated, async (req, res) => {
   }
 });
 
-adminRouter.post("/vehicles", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.post("/vehicles", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
 
@@ -476,7 +476,7 @@ adminRouter.post("/vehicles", isAuthenticated, requireProxitLock, async (req, re
   }
 });
 
-adminRouter.patch("/vehicles/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.patch("/vehicles/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
 
@@ -491,7 +491,7 @@ adminRouter.patch("/vehicles/:id", isAuthenticated, requireProxitLock, async (re
   }
 });
 
-adminRouter.delete("/vehicles/:id", isAuthenticated, requireProxitLock, async (req, res) => {
+adminRouter.delete("/vehicles/:id", isAuthenticated, requireRole("SUPER_ADMIN", "COMPANY_ADMIN"), requireProxitLock, async (req, res) => {
   try {
     const { id: userId, role } = req.user!;
 

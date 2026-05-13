@@ -42,7 +42,7 @@ const lattoneriaItemSchema = itemBaseSchema.extend({
   materialId: z.string().min(1, "Materiale obbligatorio"),
   materialThicknessId: z.string().min(1, "Spessore obbligatorio"),
   materialFinishId: z.string().optional().nullable(),
-  developmentMm: z.coerce.number().positive("Sviluppo deve essere > 0"),
+  developmentCm: z.coerce.number().positive("Sviluppo deve essere > 0"),
   quantity: z.coerce.number().positive("Metri lineari devono essere > 0"),
 });
 
@@ -108,7 +108,7 @@ interface ComputedItem {
   type: QuoteItemType;
   description: string;
   unitOfMeasure: string;
-  developmentMm: string | null;
+  developmentCm: string | null;
   quantity: string;
   weightKg: string | null;
   unitCost: string;
@@ -148,7 +148,7 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       }
     }
 
-    const developmentMm = Number(input.developmentMm);
+    const developmentCm = Number(input.developmentCm);
     const meters = Number(input.quantity);
     const thicknessMm = parseFloat(thickness.thicknessMm);
     const density = parseFloat(material.density);
@@ -163,8 +163,8 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       ? Number(input.marginPercent)
       : defaultMargin;
 
-    // Peso(kg) = (sviluppo_mm/1000) * metri * (spessore_mm/1000) * peso_specifico
-    const weightKg = (developmentMm / 1000) * meters * (thicknessMm / 1000) * density;
+    // Peso(kg) = (sviluppo_cm/100) * metri * (spessore_mm/1000) * peso_specifico
+    const weightKg = (developmentCm / 100) * meters * (thicknessMm / 1000) * density;
     // Costo(€) = Peso * costo_kg
     const cost = weightKg * costPerKg;
     // Prezzo base(€) = Costo * (1 + margine/100)
@@ -181,7 +181,7 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       type: "LATTONERIA",
       description: input.description?.trim() || defaultDescription,
       unitOfMeasure: "ml",
-      developmentMm: String(Number(input.developmentMm)),
+      developmentCm: String(Number(input.developmentCm)),
       quantity: String(Number(input.quantity)),
       weightKg: String(round4(weightKg)),
       unitCost: String(round4(costPerKg)),
@@ -219,7 +219,7 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       type: "ARTICOLO",
       description: input.description?.trim() || article.name,
       unitOfMeasure: article.unitOfMeasure || "pz",
-      developmentMm: null,
+      developmentCm: null,
       quantity: String(Number(input.quantity)),
       weightKg: null,
       unitCost: String(round4(unitCost)),
@@ -250,7 +250,7 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       type: "MANUALE",
       description: input.description.trim(),
       unitOfMeasure: input.unitOfMeasure.trim(),
-      developmentMm: null,
+      developmentCm: null,
       quantity: String(round4(quantity)),
       weightKg: null,
       unitCost: String(round4(unitCost)),
@@ -288,7 +288,7 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
     type: "GIORNATE",
     description: input.description?.trim() || labor.name,
     unitOfMeasure: "gg",
-    developmentMm: null,
+    developmentCm: null,
     quantity: String(Number(input.quantity)),
     weightKg: null,
     unitCost: String(round4(unitCost)),
@@ -317,7 +317,7 @@ function toInsertItem(quoteId: string, computed: ComputedItem, displayOrder: num
     laborRateId: computed.laborRateId,
     description: computed.description,
     unitOfMeasure: computed.unitOfMeasure,
-    developmentMm: computed.developmentMm,
+    developmentCm: computed.developmentCm,
     quantity: computed.quantity,
     weightKg: computed.weightKg,
     unitCost: computed.unitCost,

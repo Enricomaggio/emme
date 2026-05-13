@@ -427,6 +427,24 @@ export async function bootstrapDatabase(): Promise<void> {
       ALTER TABLE quote_items
         ALTER COLUMN article_id DROP NOT NULL;
     `);
+    // Rinomina development_mm → development_cm (idempotente). Lo sviluppo è
+    // sempre stato inserito in cm dalla UI; solo il nome della colonna era
+    // disallineato. Il valore non viene trasformato.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'quote_items' AND column_name = 'development_mm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'quote_items' AND column_name = 'development_cm'
+        ) THEN
+          ALTER TABLE quote_items RENAME COLUMN development_mm TO development_cm;
+        END IF;
+      END
+      $$;
+    `);
     await client.query(`
       ALTER TABLE quote_items
         ADD COLUMN IF NOT EXISTS type TEXT,
@@ -436,7 +454,7 @@ export async function bootstrapDatabase(): Promise<void> {
         ADD COLUMN IF NOT EXISTS labor_rate_id VARCHAR REFERENCES labor_rates(id),
         ADD COLUMN IF NOT EXISTS description TEXT,
         ADD COLUMN IF NOT EXISTS unit_of_measure TEXT,
-        ADD COLUMN IF NOT EXISTS development_mm NUMERIC(12, 3),
+        ADD COLUMN IF NOT EXISTS development_cm NUMERIC(12, 3),
         ADD COLUMN IF NOT EXISTS weight_kg NUMERIC(12, 4),
         ADD COLUMN IF NOT EXISTS unit_cost NUMERIC(12, 4),
         ADD COLUMN IF NOT EXISTS margin_percent NUMERIC(6, 2),

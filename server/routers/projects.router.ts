@@ -11,6 +11,7 @@ import {
   userCompanies,
   users,
   type InsertProject,
+  insertProjectTaskSchema,
 } from "@shared/schema";
 import { requireProxitLock, getProxitLockHolder } from "../utils/proxit-helpers";
 
@@ -992,10 +993,17 @@ projectsRouter.patch("/projects/:projectId/tasks/:taskId", isAuthenticated, asyn
     if (!userCompany) {
       return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
     }
-    const updateData: any = { ...req.body };
-    if (updateData.startDate) updateData.startDate = new Date(updateData.startDate);
-    if (updateData.endDate) updateData.endDate = new Date(updateData.endDate);
-    const task = await storage.updateProjectTask(req.params.taskId, userCompany.companyId, updateData);
+    const body = { ...req.body };
+    if (body.startDate && typeof body.startDate === "string") body.startDate = new Date(body.startDate);
+    if (body.endDate && typeof body.endDate === "string") body.endDate = new Date(body.endDate);
+    const parsed = insertProjectTaskSchema
+      .omit({ companyId: true, projectId: true })
+      .partial()
+      .safeParse(body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Dati attività non validi", errors: parsed.error.flatten() });
+    }
+    const task = await storage.updateProjectTask(req.params.taskId, userCompany.companyId, parsed.data);
     if (!task) {
       return res.status(404).json({ message: "Attività non trovata" });
     }

@@ -86,6 +86,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchUser]);
 
+  // Sync auth state across browser tabs: when another tab logs in/out it
+  // mutates localStorage, which fires a `storage` event in this tab.
+  useEffect(() => {
+    function handleStorage(e: StorageEvent) {
+      if (e.key !== TOKEN_KEY) return;
+      const newToken = e.newValue;
+      tokenRef = newToken;
+      setToken(newToken);
+      if (newToken) {
+        fetchUser(newToken);
+      } else {
+        setUser(null);
+      }
+    }
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [fetchUser]);
+
   async function login(email: string, password: string) {
     const response = await fetch("/api/login", {
       method: "POST",
