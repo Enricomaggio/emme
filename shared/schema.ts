@@ -383,6 +383,8 @@ export const leads = pgTable("leads", {
   
   // Note e metadati
   notes: text("notes"),
+  // Integrazione Superbill: ID cliente nell'anagrafica Superbill
+  superbillClientId: text("superbill_client_id"),
   companyId: varchar("company_id").notNull().references(() => companies.id),
   assignedToUserId: varchar("assigned_to_user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
@@ -638,6 +640,9 @@ export const quotes = pgTable("quotes", {
   discounts: jsonb("discounts").$type<QuoteDiscounts>(), // Sconti per fase e globale
   handlingData: jsonb("handling_data").$type<HandlingData>(), // Dati movimentazione cantiere
   pdfData: jsonb("pdf_data"), // Dati completi per rendering PDF (totals, clausole, ecc.)
+  // Integrazione Superbill: ID documento e data invio
+  superbillDocumentId: text("superbill_document_id"),
+  superbillSentAt: timestamp("superbill_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
