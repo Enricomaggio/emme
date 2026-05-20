@@ -15,6 +15,7 @@ import { assignmentsRouter } from "./routers/assignments.router";
 import { notificationsRouter } from "./routers/notifications.router";
 import { quotesRouter } from "./routers/quotes.router";
 import { paymentMethodsRouter } from "./routers/payment-methods.router";
+import { superbillRouter } from "./routers/superbill.router";
 import {
   isAuthenticated,
   canAccessLeads,
@@ -42,6 +43,7 @@ export async function registerRoutes(
   app.use('/api', notificationsRouter);
   app.use('/api', quotesRouter);
   app.use('/api', paymentMethodsRouter);
+  app.use('/api', superbillRouter);
 
 
 
