@@ -138,7 +138,7 @@ export interface TrasfertaData {
 }
 
 // Enum per stato preventivo
-export const quoteStatusEnum = ["DRAFT", "SENT", "ACCEPTED", "REJECTED"] as const;
+export const quoteStatusEnum = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "WORK_ORDER_DRAFT", "WORK_ORDER_SENT", "WORK_ORDER_CONFIRMED"] as const;
 export type QuoteStatus = typeof quoteStatusEnum[number];
 
 // Enum per tipo riga preventivo (Catalogo Lattoneria)
@@ -638,6 +638,10 @@ export const quotes = pgTable("quotes", {
   discounts: jsonb("discounts").$type<QuoteDiscounts>(), // Sconti per fase e globale
   handlingData: jsonb("handling_data").$type<HandlingData>(), // Dati movimentazione cantiere
   pdfData: jsonb("pdf_data"), // Dati completi per rendering PDF (totals, clausole, ecc.)
+  // Campi nota lavori (post-cantiere)
+  workOrderNotes: text("work_order_notes"),
+  workOrderSentAt: timestamp("work_order_sent_at"),
+  workOrderConfirmedAt: timestamp("work_order_confirmed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -698,6 +702,9 @@ export const quoteItems = pgTable("quote_items", {
 
   // Ordinamento riga nel preventivo
   displayOrder: integer("display_order").notNull().default(0),
+
+  // Override quantità per nota lavori (10% dei casi in cui differisce dal preventivo)
+  workOrderQuantityOverride: numeric("work_order_quantity_override"),
 
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
