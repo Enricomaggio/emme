@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users, UserPlus, TrendingUp, TrendingDown, CheckCircle2, Bell, BellRing, Check, ExternalLink, Clock, AlertTriangle, FileText, Trophy, User, Briefcase, Calendar, Minus, ChevronDown, ChevronUp, Euro, Send, XCircle, FolderKanban, Camera, Video, Pencil, Target, Timer } from "lucide-react";
+import { Users, TrendingUp, TrendingDown, CheckCircle2, Bell, BellRing, Check, ExternalLink, Clock, AlertTriangle, FileText, Trophy, User, Briefcase, Calendar, Minus, ChevronDown, ChevronUp, Euro, Send, XCircle, FolderKanban, Camera, Video, Pencil, Target, Timer } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";

@@ -333,13 +333,11 @@ leadsRouter.get("/leads", isAuthenticated, async (req, res) => {
     if (leads.length > 0 && ctx.companyId) {
       const leadIds = leads.map(l => l.id);
       // Get pipeline stages for this company to identify Vinto/Perso
-      const stages = await db.select().from(pipelineStages).where(eq(pipelineStages.companyId, ctx.companyId));
+      const stages = await storage.getStagesByCompany(ctx.companyId);
       const wonStageIds = new Set(stages.filter(s => s.name === "Vinto").map(s => s.id));
       const lostStageIds = new Set(stages.filter(s => s.name === "Perso").map(s => s.id));
 
-      const opps = await db.select({ leadId: opportunities.leadId, stageId: opportunities.stageId })
-        .from(opportunities)
-        .where(inArray(opportunities.leadId, leadIds));
+      const opps = await storage.getOpportunitiesByLeadIds(leadIds);
 
       for (const opp of opps) {
         const key = opp.leadId;

@@ -8,11 +8,8 @@ import {
   hashPassword,
   resetFailedLoginAttempts,
 } from "../auth";
-import { passwordResetTokens, users } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
-import { db } from "../db";
-import { eq } from "drizzle-orm";
 import crypto from "crypto";
 
 export const usersRouter = Router();
@@ -245,7 +242,7 @@ usersRouter.post("/users/change-password", isAuthenticated, async (req, res) => 
       return res.status(401).json({ message: "La password corrente non è corretta" });
     }
     const hashedPassword = await hashPassword(validatedData.newPassword);
-    await db.update(users).set({ password: hashedPassword }).where(eq(users.id, userId));
+    await storage.updateUserPassword(userId, hashedPassword);
     res.json({ message: "Password aggiornata con successo" });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -415,7 +412,7 @@ usersRouter.post("/users/:userId/reset-password", isAuthenticated, async (req, r
     }
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 ore
-    await db.insert(passwordResetTokens).values({ userId: targetUserId, token, expiresAt });
+    await storage.createPasswordResetToken(targetUserId, token, expiresAt);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const resetLink = `${baseUrl}/reset-password?token=${token}`;
     res.json({ resetLink });

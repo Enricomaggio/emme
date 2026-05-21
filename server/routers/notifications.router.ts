@@ -391,9 +391,7 @@ notificationsRouter.post("/notifications/check-expiring-quotes", isAuthenticated
       });
     }
 
-    if (notificationsToCreate.length > 0) {
-      await db.insert(notifications).values(notificationsToCreate);
-    }
+    await storage.createNotificationsBulk(notificationsToCreate);
 
     res.json({ created: notificationsToCreate.length });
   } catch (error: any) {
