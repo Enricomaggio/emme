@@ -53,10 +53,11 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { 
-  ArrowLeft, Mail, Phone, Plus, Trash2, Building2, FileText, Clock, Save, 
+import {
+  ArrowLeft, Mail, Phone, Plus, Trash2, Building2, FileText, Clock, Save,
   User, Edit, MoveRight, UserPlus, CreditCard, Users, MapPin, Receipt, Briefcase,
-  BarChart3, Search, RefreshCw, Shield, Settings, BellRing, AlertTriangle, Copy, StickyNote, Info
+  BarChart3, Search, RefreshCw, Shield, Settings, BellRing, AlertTriangle, Copy, StickyNote, Info,
+  Send, CheckCircle2, Loader2, AlertCircle, ExternalLink
 } from "lucide-react";
 import type { 
   Lead, Opportunity, PipelineStage, ActivityLog, ContactType, 
@@ -170,6 +171,176 @@ interface AssignableUser {
   email: string;
   role: string;
 }
+
+// ─── Superbill Fatture Tab ────────────────────────────────────────────────────
+
+interface SuperbillFattura {
+  id: string;
+  numeroFattura: string;
+  dataDocumento: string;
+  importo: number;
+  stato: "INVIATA_SDI" | "PAGATA" | "BOZZA";
+  metodoPagamento: "RIBA" | "BONIFICO";
+  dataScadenza: string | null;
+  statoPagamento: "IN_SCADENZA" | "SCADUTA" | "PAGATA";
+  descrizione: string;
+}
+
+function SuperbillFattureTab({ leadId }: { leadId: string }) {
+  const { data, isLoading } = useQuery<{ isMock: boolean; fatture: SuperbillFattura[] }>({
+    queryKey: [`/api/superbill/fatture-lead/${leadId}`],
+    enabled: !!leadId,
+  });
+
+  const fatture = data?.fatture || [];
+  const isMock = data?.isMock ?? true;
+
+  const statoFatturaConfig: Record<string, { label: string; className: string }> = {
+    INVIATA_SDI: { label: "Inviata SDI", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+    PAGATA: { label: "Pagata", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+    BOZZA: { label: "Bozza", className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" },
+  };
+
+  const statoPagamentoConfig: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
+    IN_SCADENZA: {
+      label: "In scadenza",
+      className: "text-orange-600 dark:text-orange-400",
+      icon: <AlertCircle className="w-3.5 h-3.5" />,
+    },
+    SCADUTA: {
+      label: "Scaduta",
+      className: "text-red-600 dark:text-red-400",
+      icon: <AlertTriangle className="w-3.5 h-3.5" />,
+    },
+    PAGATA: {
+      label: "Pagata",
+      className: "text-green-600 dark:text-green-400",
+      icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+    },
+  };
+
+  const fmtCurrency = (n: number) =>
+    new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
+
+  const fmtDate = (d: string | null) => {
+    if (!d) return "—";
+    return format(new Date(d), "dd MMM yyyy", { locale: it });
+  };
+
+  const totaleDaIncassare = fatture
+    .filter((f) => f.statoPagamento !== "PAGATA")
+    .reduce((acc, f) => acc + f.importo, 0);
+
+  const totaleScaduto = fatture
+    .filter((f) => f.statoPagamento === "SCADUTA")
+    .reduce((acc, f) => acc + f.importo, 0);
+
+  return (
+    <div className="space-y-4">
+      {isMock && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-400">
+          <Info className="w-3.5 h-3.5 shrink-0" />
+          <span>
+            <strong>Modalità Demo</strong> — Dati di esempio. Una volta configurato Superbill, qui appariranno le fatture reali.
+          </span>
+        </div>
+      )}
+
+      {/* KPI mini */}
+      {fatture.length > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground mb-1">Da incassare</p>
+              <p className="text-xl font-bold text-primary">{fmtCurrency(totaleDaIncassare)}</p>
+            </CardContent>
+          </Card>
+          <Card className={totaleScaduto > 0 ? "border-red-200 dark:border-red-800" : ""}>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground mb-1">Scaduto non pagato</p>
+              <p className={`text-xl font-bold ${totaleScaduto > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                {fmtCurrency(totaleScaduto)}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5" />
+            Fatture Superbill
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-4 space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : fatture.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">Nessuna fattura trovata</p>
+              <p className="text-sm mt-1">Le fatture inviate a Superbill appariranno qui</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>N. Fattura</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Descrizione</TableHead>
+                  <TableHead>Metodo</TableHead>
+                  <TableHead className="text-right">Importo</TableHead>
+                  <TableHead>Scadenza</TableHead>
+                  <TableHead>Stato</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {fatture.map((f) => {
+                  const statoFatt = statoFatturaConfig[f.stato] || statoFatturaConfig.BOZZA;
+                  const statoPag = statoPagamentoConfig[f.statoPagamento] || statoPagamentoConfig.IN_SCADENZA;
+                  return (
+                    <TableRow key={f.id}>
+                      <TableCell className="font-mono text-xs font-medium">{f.numeroFattura}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{fmtDate(f.dataDocumento)}</TableCell>
+                      <TableCell className="text-sm max-w-[200px] truncate">{f.descrizione || "—"}</TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded ${
+                          f.metodoPagamento === "RIBA"
+                            ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                            : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                        }`}>
+                          {f.metodoPagamento}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">{fmtCurrency(f.importo)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{fmtDate(f.dataScadenza)}</TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <span className={`inline-block text-xs px-1.5 py-0.5 rounded font-medium ${statoFatt.className}`}>
+                            {statoFatt.label}
+                          </span>
+                          <div className={`flex items-center gap-1 text-xs ${statoPag.className}`}>
+                            {statoPag.icon}
+                            {statoPag.label}
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function LeadDetailPage() {
   const { user } = useAuth();
@@ -981,12 +1152,10 @@ export default function LeadDetailPage() {
               <FileText className="w-4 h-4 mr-2" />
               Opportunità ({opportunities.length})
             </TabsTrigger>
-            {APP_CONFIG.moduleAmministrazione && (
-              <TabsTrigger value="amministrazione" data-testid="tab-amministrazione">
-                <CreditCard className="w-4 h-4 mr-2" />
-                Amministrazione
-              </TabsTrigger>
-            )}
+            <TabsTrigger value="amministrazione" data-testid="tab-amministrazione">
+              <CreditCard className="w-4 h-4 mr-2" />
+              Fatturazione
+            </TabsTrigger>
             {false && (watchEntityType === "COMPANY" || lead?.entityType === "COMPANY") && (
               <TabsTrigger value="finanziaria" data-testid="tab-finanziaria">
                 <BarChart3 className="w-4 h-4 mr-2" />
@@ -2111,40 +2280,9 @@ export default function LeadDetailPage() {
             </Card>
           </TabsContent>
 
-          {APP_CONFIG.moduleAmministrazione && (
-            <TabsContent value="amministrazione" className="mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CreditCard className="w-5 h-5" />
-                    Fatturazione
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Numero Fattura</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Importo</TableHead>
-                        <TableHead>Stato Pagamento</TableHead>
-                        <TableHead>Scadenza</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                          <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                          <p className="font-medium">In attesa di integrazione con Arca Evolution</p>
-                          <p className="text-sm mt-1">I dati di fatturazione saranno disponibili dopo l'integrazione</p>
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
+          <TabsContent value="amministrazione" className="mt-6">
+            <SuperbillFattureTab leadId={leadId!} />
+          </TabsContent>
 
           {(watchEntityType === "COMPANY" || lead?.entityType === "COMPANY") && (
             <TabsContent value="finanziaria" className="mt-6" data-testid="content-finanziaria">

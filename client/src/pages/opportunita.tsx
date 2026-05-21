@@ -54,7 +54,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Target, GripVertical, User, Trash2, MapPin, Copy, Building2, Briefcase, ExternalLink, Calculator, FileText, Eye, BellRing, Bell, Pencil, Settings, ArrowUp, ArrowDown, X, Camera, Video, Loader2, ClipboardCheck, AlertTriangle, Calendar, HardHat, Truck, Euro, Phone, Mail, Search, StickyNote, ChevronLeft, ChevronRight, Info, MoreHorizontal, ChevronDown } from "lucide-react";
+import { Plus, Target, GripVertical, User, Trash2, MapPin, Copy, Building2, Briefcase, ExternalLink, Calculator, FileText, Eye, BellRing, Bell, Pencil, Settings, ArrowUp, ArrowDown, X, Camera, Video, Loader2, ClipboardCheck, AlertTriangle, Calendar, HardHat, Truck, Euro, Phone, Mail, Search, StickyNote, ChevronLeft, ChevronRight, Info, MoreHorizontal, ChevronDown, Send } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -130,6 +130,8 @@ interface Quote {
   totalAmount: string;
   createdAt: string;
   discounts?: QuoteDiscounts | null;
+  superbillDocumentId?: string | null;
+  superbillSentAt?: string | null;
 }
 
 function applyGlobalDiscount(
@@ -303,6 +305,37 @@ function OpportunitySchedaCantiereModal({
     return `€ ${num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
   };
 
+  // ── Superbill ──────────────────────────────────────────────────────────────
+  const { toast } = useToast();
+  const [superbillDialogOpen, setSuperbillDialogOpen] = useState(false);
+  const [localSuperbillId, setLocalSuperbillId] = useState<string | null>(
+    quote?.superbillDocumentId ?? null
+  );
+
+  const inviaFatturaMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/superbill/fattura/${quote!.id}`),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      setLocalSuperbillId(data.superbillDocumentId);
+      setSuperbillDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/opportunities', opportunityId, 'site-details'] });
+      toast({
+        title: "Fattura creata su Superbill",
+        description: `${data.isMock ? "[DEMO] " : ""}Fattura ${data.superbillDocumentId} creata in bozza. L'amministrazione può ora approvarla e inviarla.`,
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Errore Superbill",
+        description: err?.message || "Impossibile creare la fattura su Superbill",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const superbillId = localSuperbillId || quote?.superbillDocumentId;
+  // ──────────────────────────────────────────────────────────────────────────
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
@@ -464,6 +497,26 @@ function OpportunitySchedaCantiereModal({
                         );
                       })()}
                     </div>
+                    {/* ── Superbill CTA ── */}
+                    <div className="mb-2">
+                      {superbillId ? (
+                        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+                          <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                          <span className="text-xs font-medium text-green-700 dark:text-green-400">
+                            Fattura Superbill: {superbillId}
+                          </span>
+                        </div>
+                      ) : quote?.status === "ACCEPTED" ? (
+                        <button
+                          onClick={() => setSuperbillDialogOpen(true)}
+                          className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-700 text-xs font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          Invia fattura a Superbill
+                        </button>
+                      ) : null}
+                    </div>
+
                     <div className="mb-2">
                       <SchedaInfoRow label="Tipo preventivo" value={quoteModeLabels[quoteMode]} />
                     </div>
@@ -523,6 +576,62 @@ function OpportunitySchedaCantiereModal({
           </div>
         )}
       </DialogContent>
+
+      {/* Dialog conferma invio fattura Superbill */}
+      <Dialog open={superbillDialogOpen} onOpenChange={setSuperbillDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5 text-blue-600" />
+              Invia fattura a Superbill
+            </DialogTitle>
+            <DialogDescription>
+              Verrà creata una fattura in <strong>bozza</strong> su Superbill. L'amministrazione dovrà approvarla e inviarla allo SDI.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Cliente</span>
+                <span className="font-medium">{clientName || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Preventivo</span>
+                <span className="font-medium">{quote?.number || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Importo</span>
+                <span className="font-bold text-primary">{fmtCurrency(quote?.totalAmount) || "—"}</span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              La fattura sarà in stato <strong>bozza</strong> — nessun documento verrà inviato automaticamente.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setSuperbillDialogOpen(false)}>
+              Annulla
+            </Button>
+            <Button
+              onClick={() => inviaFatturaMutation.mutate()}
+              disabled={inviaFatturaMutation.isPending}
+              className="gap-2"
+            >
+              {inviaFatturaMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Invio in corso…
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Conferma invio
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users, TrendingUp, TrendingDown, CheckCircle2, Bell, BellRing, Check, ExternalLink, Clock, AlertTriangle, FileText, Trophy, User, Briefcase, Calendar, Minus, ChevronDown, ChevronUp, Euro, Send, XCircle, FolderKanban, Camera, Video, Pencil, Target, Timer } from "lucide-react";
+import { Users, UserPlus, TrendingUp, TrendingDown, CheckCircle2, Bell, BellRing, Check, ExternalLink, Clock, AlertTriangle, FileText, Trophy, User, Briefcase, Calendar, Minus, ChevronDown, ChevronUp, Euro, Send, XCircle, FolderKanban, Camera, Video, Pencil, Target, Timer, AlertCircle, CreditCard, ArrowDownToLine, ArrowUpFromLine, Banknote, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -1587,10 +1587,290 @@ function SalesAgentDashboard({
   );
 }
 
-function AdminDashboard({ 
-  user, 
-  leads, 
-  opportunities, 
+// ─── Scadenze Finanziarie (Superbill) ────────────────────────────────────────
+
+interface ScadenzaFinanziaria {
+  id: string;
+  tipo: "ATTIVA" | "PASSIVA";
+  numeroFattura: string;
+  cliente: string;
+  importo: number;
+  dataScadenza: string;
+  metodoPagamento: "RIBA" | "BONIFICO";
+  stato: "IN_SCADENZA" | "SCADUTA" | "PAGATA";
+  descrizione: string;
+}
+
+function ScadenzeFinanziarie() {
+  const [giorni, setGiorni] = useState<30 | 60 | 90>(30);
+  const [tipoFilter, setTipoFilter] = useState<"TUTTE" | "ATTIVA" | "PASSIVA">("TUTTE");
+
+  const { data, isLoading } = useQuery<{ isMock: boolean; scadenze: ScadenzaFinanziaria[] }>({
+    queryKey: [`/api/superbill/scadenze?giorni=${giorni}`],
+  });
+
+  const scadenze = data?.scadenze || [];
+  const isMock = data?.isMock ?? true;
+
+  const now = new Date();
+
+  const isScaduta = (s: ScadenzaFinanziaria) => s.stato === "SCADUTA";
+  const isInScadenza = (s: ScadenzaFinanziaria) =>
+    s.stato !== "SCADUTA" && s.stato !== "PAGATA";
+
+  const scaduteAttive = scadenze.filter((s) => s.tipo === "ATTIVA" && isScaduta(s));
+  const scadutePassive = scadenze.filter((s) => s.tipo === "PASSIVA" && isScaduta(s));
+
+  const attiveInScadenza = scadenze.filter((s) => s.tipo === "ATTIVA" && isInScadenza(s));
+  const passiveInScadenza = scadenze.filter((s) => s.tipo === "PASSIVA" && isInScadenza(s));
+
+  const totaleAttive = attiveInScadenza.reduce((a, s) => a + s.importo, 0);
+  const totalePassive = passiveInScadenza.reduce((a, s) => a + s.importo, 0);
+  const totaleScadutoAttive = scaduteAttive.reduce((a, s) => a + s.importo, 0);
+  const totaleScadutoPassive = scadutePassive.reduce((a, s) => a + s.importo, 0);
+
+  const attiveRiba = attiveInScadenza.filter((s) => s.metodoPagamento === "RIBA");
+  const activeBonif = attiveInScadenza.filter((s) => s.metodoPagamento === "BONIFICO");
+  const passiveRiba = passiveInScadenza.filter((s) => s.metodoPagamento === "RIBA");
+  const passiveBonif = passiveInScadenza.filter((s) => s.metodoPagamento === "BONIFICO");
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+  const fmtDate = (d: string) => {
+    const date = new Date(d);
+    const diff = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const label = date.toLocaleDateString("it-IT", { day: "2-digit", month: "short" });
+    return { label, diff };
+  };
+
+  const filteredList = scadenze.filter((s) => {
+    if (tipoFilter !== "TUTTE" && s.tipo !== tipoFilter) return false;
+    return true;
+  }).sort((a, b) => new Date(a.dataScadenza).getTime() - new Date(b.dataScadenza).getTime());
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-primary" />
+            Scadenze Finanziarie
+            {isMock && (
+              <span className="text-xs font-normal text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full">
+                DEMO
+              </span>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {(["30", "60", "90"] as const).map((g) => (
+              <button
+                key={g}
+                onClick={() => setGiorni(Number(g) as 30 | 60 | 90)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  giorni === Number(g)
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border hover:bg-muted"
+                }`}
+              >
+                {g}gg
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+          </div>
+        ) : (
+          <>
+            {/* KPI row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-lg border p-3 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <ArrowDownToLine className="w-3.5 h-3.5 text-green-600" />
+                  Da incassare
+                </div>
+                <p className="text-lg font-bold text-green-700 dark:text-green-400">{fmt(totaleAttive)}</p>
+                <p className="text-xs text-muted-foreground">{attiveInScadenza.length} fatture</p>
+              </div>
+              <div className="rounded-lg border p-3 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <ArrowUpFromLine className="w-3.5 h-3.5 text-blue-600" />
+                  Da pagare
+                </div>
+                <p className="text-lg font-bold text-blue-700 dark:text-blue-400">{fmt(totalePassive)}</p>
+                <p className="text-xs text-muted-foreground">{passiveInScadenza.length} fatture</p>
+              </div>
+              <div className={`rounded-lg border p-3 space-y-1 ${totaleScadutoAttive > 0 ? "border-red-200 dark:border-red-800" : ""}`}>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <AlertTriangle className={`w-3.5 h-3.5 ${totaleScadutoAttive > 0 ? "text-red-500" : "text-muted-foreground"}`} />
+                  Scaduto (entrate)
+                </div>
+                <p className={`text-lg font-bold ${totaleScadutoAttive > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                  {fmt(totaleScadutoAttive)}
+                </p>
+                <p className="text-xs text-muted-foreground">{scaduteAttive.length} fatture</p>
+              </div>
+              <div className={`rounded-lg border p-3 space-y-1 ${totaleScadutoPassive > 0 ? "border-orange-200 dark:border-orange-800" : ""}`}>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <AlertCircle className={`w-3.5 h-3.5 ${totaleScadutoPassive > 0 ? "text-orange-500" : "text-muted-foreground"}`} />
+                  Scaduto (uscite)
+                </div>
+                <p className={`text-lg font-bold ${totaleScadutoPassive > 0 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                  {fmt(totaleScadutoPassive)}
+                </p>
+                <p className="text-xs text-muted-foreground">{scadutePassive.length} fatture</p>
+              </div>
+            </div>
+
+            {/* Metodo pagamento split */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border p-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <ArrowDownToLine className="w-3 h-3 text-green-600" />
+                  Entrate per metodo
+                </p>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                    RIBA
+                  </span>
+                  <div className="text-right">
+                    <span className="font-semibold">{fmt(attiveRiba.reduce((a, s) => a + s.importo, 0))}</span>
+                    <span className="text-xs text-muted-foreground ml-1">({attiveRiba.length})</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0" />
+                    Bonifico
+                  </span>
+                  <div className="text-right">
+                    <span className="font-semibold">{fmt(activeBonif.reduce((a, s) => a + s.importo, 0))}</span>
+                    <span className="text-xs text-muted-foreground ml-1">({activeBonif.length})</span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-lg border p-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <ArrowUpFromLine className="w-3 h-3 text-blue-600" />
+                  Uscite per metodo
+                </p>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                    RIBA
+                  </span>
+                  <div className="text-right">
+                    <span className="font-semibold">{fmt(passiveRiba.reduce((a, s) => a + s.importo, 0))}</span>
+                    <span className="text-xs text-muted-foreground ml-1">({passiveRiba.length})</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0" />
+                    Bonifico
+                  </span>
+                  <div className="text-right">
+                    <span className="font-semibold">{fmt(passiveBonif.reduce((a, s) => a + s.importo, 0))}</span>
+                    <span className="text-xs text-muted-foreground ml-1">({passiveBonif.length})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Filtro tipo + tabella */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <p className="text-sm font-medium">Dettaglio scadenze</p>
+                <div className="flex gap-1 ml-auto">
+                  {(["TUTTE", "ATTIVA", "PASSIVA"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTipoFilter(t)}
+                      className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                        tipoFilter === t
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border hover:bg-muted"
+                      }`}
+                    >
+                      {t === "TUTTE" ? "Tutte" : t === "ATTIVA" ? "Entrate" : "Uscite"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {filteredList.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nessuna scadenza nel periodo selezionato
+                </p>
+              ) : (
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                  {filteredList.map((s) => {
+                    const { label: dateLabel, diff } = fmtDate(s.dataScadenza);
+                    const isOverdue = s.stato === "SCADUTA";
+                    const isUrgent = !isOverdue && diff <= 7;
+                    return (
+                      <div
+                        key={s.id}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm ${
+                          isOverdue
+                            ? "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20"
+                            : isUrgent
+                            ? "border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20"
+                            : "border-border bg-muted/20"
+                        }`}
+                      >
+                        {/* Tipo badge */}
+                        <div className={`w-1.5 h-8 rounded-full shrink-0 ${s.tipo === "ATTIVA" ? "bg-green-500" : "bg-blue-500"}`} />
+
+                        {/* Dati */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs text-muted-foreground">{s.numeroFattura}</span>
+                            <span className={`text-xs px-1 py-0.5 rounded ${
+                              s.metodoPagamento === "RIBA"
+                                ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                            }`}>
+                              {s.metodoPagamento}
+                            </span>
+                          </div>
+                          <p className="font-medium truncate leading-tight mt-0.5">{s.cliente}</p>
+                        </div>
+
+                        {/* Importo + scadenza */}
+                        <div className="text-right shrink-0">
+                          <p className="font-bold">{fmt(s.importo)}</p>
+                          <p className={`text-xs ${
+                            isOverdue ? "text-red-600 dark:text-red-400 font-medium" :
+                            isUrgent ? "text-orange-600 dark:text-orange-400" :
+                            "text-muted-foreground"
+                          }`}>
+                            {isOverdue ? `Scad. ${dateLabel}` : diff === 0 ? "Oggi" : diff === 1 ? "Domani" : dateLabel}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AdminDashboard({
+  user,
+  leads,
+  opportunities,
   stages,
   activeReminders, 
   upcomingReminders, 
@@ -2449,6 +2729,9 @@ function AdminDashboard({
           );
         })()}
       </div>
+
+      {/* Scadenze Finanziarie Superbill */}
+      <ScadenzeFinanziarie />
     </div>
   );
 }

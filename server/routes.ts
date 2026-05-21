@@ -14,6 +14,7 @@ import { notificationsRouter } from "./routers/notifications.router";
 import { quotesRouter } from "./routers/quotes.router";
 import { paymentMethodsRouter } from "./routers/payment-methods.router";
 import { dashboardRouter } from "./routers/dashboard.router";
+import { superbillRouter } from "./routers/superbill.router";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -33,6 +34,7 @@ export async function registerRoutes(
   app.use('/api', quotesRouter);
   app.use('/api', paymentMethodsRouter);
   app.use('/api', dashboardRouter);
+  app.use('/api', superbillRouter);
 
   return httpServer;
 }
