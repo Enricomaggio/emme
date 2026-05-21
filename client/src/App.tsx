@@ -64,7 +64,6 @@ import SettingsPage from "@/pages/settings";
 import TeamPage from "@/pages/team";
 import AdminPage from "@/pages/admin";
 import CatalogPage from "@/pages/catalog";
-import InCostruzionePage from "@/pages/in-costruzione";
 import QuoteEditorPage from "@/pages/quote-editor";
 import ProgettiPage from "@/pages/progetti";
 import GanttPage from "@/pages/gantt";

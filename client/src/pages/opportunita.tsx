@@ -63,6 +63,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ReminderModal } from "@/components/reminder-modal";
+import { NotaLavoriModal } from "@/components/nota-lavori-modal";
 import { formatCurrency } from "@/lib/formatCurrency";
 import type { Opportunity, Lead, PipelineStage, ContactReferent, LostReason, SiteQuality, QuoteStatus, Worker, QuoteDiscounts } from "@shared/schema";
 import { lostReasonEnum, siteQualityEnum } from "@shared/schema";
@@ -1312,6 +1313,7 @@ export default function OpportunitaPage() {
   });
 
   const [showSquadreInfoDialog, setShowSquadreInfoDialog] = useState(false);
+  const [isNotaLavoriOpen, setIsNotaLavoriOpen] = useState(false);
 
   const { data: referents = [] } = useQuery<ContactReferent[]>({
     queryKey: ["/api/leads", watchLeadId, "referents"],
@@ -1354,6 +1356,21 @@ export default function OpportunitaPage() {
   const isPreventivoInviatoStage = (stageId: string) => {
     const stage = stages.find(s => s.id === stageId);
     return stage?.name === "Preventivo Inviato";
+  };
+
+  const isPostWonStage = (stageId: string) => {
+    const stage = stages.find(s => s.id === stageId);
+    const postWonNames = ["Vinto", "Cantiere in corso", "Nota Lavori da Inviare", "Nota Lavori Inviata", "Da Fatturare"];
+    return postWonNames.some(n => stage?.name === n);
+  };
+
+  const hasNotaLavori = (stageId: string) => {
+    return isPostWonStage(stageId) && opportunityQuotes.some(q =>
+      q.status === "ACCEPTED" ||
+      q.status === "WORK_ORDER_DRAFT" ||
+      q.status === "WORK_ORDER_SENT" ||
+      q.status === "WORK_ORDER_CONFIRMED"
+    );
   };
 
   useEffect(() => {
@@ -3092,6 +3109,17 @@ export default function OpportunitaPage() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <div className="flex flex-wrap gap-2 sm:justify-end">
+                    {selectedOpportunity && hasNotaLavori(selectedOpportunity.stageId) && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setIsNotaLavoriOpen(true)}
+                        data-testid="button-nota-lavori"
+                      >
+                        <ClipboardCheck className="w-4 h-4 mr-2" />
+                        Nota Lavori
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant="secondary"
@@ -3140,6 +3168,14 @@ export default function OpportunitaPage() {
             opportunityId={selectedOpportunity.id}
             open={isSchedaOpen}
             onOpenChange={setIsSchedaOpen}
+          />
+        )}
+
+        {selectedOpportunity && (
+          <NotaLavoriModal
+            opportunityId={selectedOpportunity.id}
+            open={isNotaLavoriOpen}
+            onOpenChange={setIsNotaLavoriOpen}
           />
         )}
 

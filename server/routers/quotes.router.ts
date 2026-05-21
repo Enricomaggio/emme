@@ -540,6 +540,131 @@ quotesRouter.put("/quotes/:id", isAuthenticated, async (req, res) => {
   }
 });
 
+// ==================== Nota Lavori ====================
+
+// POST /api/quotes/:id/work-order/start — Avvia nota lavori (ACCEPTED → WORK_ORDER_DRAFT)
+quotesRouter.post("/quotes/:id/work-order/start", isAuthenticated, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user!;
+    if (!canAccessLeads(role)) return res.status(403).json({ message: "Accesso negato" });
+    const userCompany = await resolveUserCompany(userId, role, req);
+    if (!userCompany) return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+
+    const quote = await storage.getQuote(req.params.id, userCompany.companyId);
+    if (!quote) return res.status(404).json({ message: "Preventivo non trovato" });
+    if (quote.status !== "ACCEPTED") return res.status(400).json({ message: "Il preventivo deve essere nello stato Accettato" });
+
+    const updated = await storage.updateQuote(req.params.id, userCompany.companyId, { status: "WORK_ORDER_DRAFT" });
+
+    // Sposta l'opportunità allo stadio "Cantiere in corso" se esiste
+    const stages = await storage.getStagesByCompany(userCompany.companyId);
+    const cantiereStage = stages.find(s => s.name === "Cantiere in corso");
+    if (cantiereStage) {
+      await storage.updateOpportunity(quote.opportunityId, userCompany.companyId, { stageId: cantiereStage.id });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: "Errore nell'avvio della nota lavori" });
+  }
+});
+
+// POST /api/quotes/:id/work-order/send — Invia nota lavori (WORK_ORDER_DRAFT → WORK_ORDER_SENT)
+quotesRouter.post("/quotes/:id/work-order/send", isAuthenticated, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user!;
+    if (!canAccessLeads(role)) return res.status(403).json({ message: "Accesso negato" });
+    const userCompany = await resolveUserCompany(userId, role, req);
+    if (!userCompany) return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+
+    const quote = await storage.getQuote(req.params.id, userCompany.companyId);
+    if (!quote) return res.status(404).json({ message: "Preventivo non trovato" });
+    if (quote.status !== "WORK_ORDER_DRAFT") return res.status(400).json({ message: "La nota lavori deve essere in bozza" });
+
+    const { notes } = z.object({ notes: z.string().optional() }).parse(req.body);
+    const updated = await storage.updateQuote(req.params.id, userCompany.companyId, {
+      status: "WORK_ORDER_SENT",
+      workOrderSentAt: new Date(),
+      ...(notes !== undefined && { workOrderNotes: notes }),
+    });
+
+    // Sposta l'opportunità allo stadio "Nota Lavori Inviata"
+    const stages = await storage.getStagesByCompany(userCompany.companyId);
+    const nlInviataStage = stages.find(s => s.name === "Nota Lavori Inviata");
+    if (nlInviataStage) {
+      await storage.updateOpportunity(quote.opportunityId, userCompany.companyId, { stageId: nlInviataStage.id });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: "Errore nell'invio della nota lavori" });
+  }
+});
+
+// POST /api/quotes/:id/work-order/confirm — Conferma nota lavori (WORK_ORDER_SENT → WORK_ORDER_CONFIRMED)
+quotesRouter.post("/quotes/:id/work-order/confirm", isAuthenticated, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user!;
+    if (!canAccessLeads(role)) return res.status(403).json({ message: "Accesso negato" });
+    const userCompany = await resolveUserCompany(userId, role, req);
+    if (!userCompany) return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+
+    const quote = await storage.getQuote(req.params.id, userCompany.companyId);
+    if (!quote) return res.status(404).json({ message: "Preventivo non trovato" });
+    if (quote.status !== "WORK_ORDER_SENT") return res.status(400).json({ message: "La nota lavori deve essere nello stato Inviata" });
+
+    const updated = await storage.updateQuote(req.params.id, userCompany.companyId, {
+      status: "WORK_ORDER_CONFIRMED",
+      workOrderConfirmedAt: new Date(),
+    });
+
+    // Sposta l'opportunità allo stadio "Da Fatturare"
+    const stages = await storage.getStagesByCompany(userCompany.companyId);
+    const daFatturareStage = stages.find(s => s.name === "Da Fatturare");
+    if (daFatturareStage) {
+      await storage.updateOpportunity(quote.opportunityId, userCompany.companyId, { stageId: daFatturareStage.id });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: "Errore nella conferma della nota lavori" });
+  }
+});
+
+// PATCH /api/quotes/:id/work-order/notes — Aggiorna note nota lavori
+quotesRouter.patch("/quotes/:id/work-order/notes", isAuthenticated, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user!;
+    if (!canAccessLeads(role)) return res.status(403).json({ message: "Accesso negato" });
+    const userCompany = await resolveUserCompany(userId, role, req);
+    if (!userCompany) return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+
+    const { notes } = z.object({ notes: z.string() }).parse(req.body);
+    const updated = await storage.updateQuote(req.params.id, userCompany.companyId, { workOrderNotes: notes });
+    if (!updated) return res.status(404).json({ message: "Preventivo non trovato" });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: "Errore nell'aggiornamento delle note" });
+  }
+});
+
+// PATCH /api/quote-items/:id/work-order-quantity — Override quantità per nota lavori
+quotesRouter.patch("/quote-items/:id/work-order-quantity", isAuthenticated, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user!;
+    if (!canAccessLeads(role)) return res.status(403).json({ message: "Accesso negato" });
+    const userCompany = await resolveUserCompany(userId, role, req);
+    if (!userCompany) return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+
+    const { quantity } = z.object({ quantity: z.number().nullable() }).parse(req.body);
+    const updated = await storage.updateQuoteItemWorkOrderQuantity(req.params.id, userCompany.companyId, quantity);
+    if (!updated) return res.status(404).json({ message: "Riga non trovata" });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: "Errore nell'aggiornamento della quantità" });
+  }
+});
+
 // DELETE /api/quotes/:id — Elimina preventivo
 quotesRouter.delete("/quotes/:id", isAuthenticated, async (req, res) => {
   try {

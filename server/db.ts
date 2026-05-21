@@ -466,6 +466,52 @@ export async function bootstrapDatabase(): Promise<void> {
     await client.query(`
       CREATE INDEX IF NOT EXISTS quote_items_display_order_idx ON quote_items (display_order);
     `);
+
+    // Migration 0027: colonne nota lavori su quotes e quote_items
+    await client.query(`
+      ALTER TABLE quotes
+        ADD COLUMN IF NOT EXISTS work_order_notes TEXT,
+        ADD COLUMN IF NOT EXISTS work_order_sent_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS work_order_confirmed_at TIMESTAMP;
+    `);
+    await client.query(`
+      ALTER TABLE quote_items
+        ADD COLUMN IF NOT EXISTS work_order_quantity_override NUMERIC;
+    `);
+
+    // Migration 0028: stadi pipeline post-vendita (Cantiere in corso, Nota Lavori, Da Fatturare)
+    await client.query(`
+      INSERT INTO pipeline_stages (id, name, "order", color, company_id, created_at)
+      SELECT gen_random_uuid(), 'Cantiere in corso', 7, '#F97316', c.id, NOW()
+      FROM companies c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pipeline_stages ps WHERE ps.company_id = c.id AND ps.name = 'Cantiere in corso'
+      );
+    `);
+    await client.query(`
+      INSERT INTO pipeline_stages (id, name, "order", color, company_id, created_at)
+      SELECT gen_random_uuid(), 'Nota Lavori da Inviare', 8, '#6366F1', c.id, NOW()
+      FROM companies c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pipeline_stages ps WHERE ps.company_id = c.id AND ps.name = 'Nota Lavori da Inviare'
+      );
+    `);
+    await client.query(`
+      INSERT INTO pipeline_stages (id, name, "order", color, company_id, created_at)
+      SELECT gen_random_uuid(), 'Nota Lavori Inviata', 9, '#8B5CF6', c.id, NOW()
+      FROM companies c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pipeline_stages ps WHERE ps.company_id = c.id AND ps.name = 'Nota Lavori Inviata'
+      );
+    `);
+    await client.query(`
+      INSERT INTO pipeline_stages (id, name, "order", color, company_id, created_at)
+      SELECT gen_random_uuid(), 'Da Fatturare', 10, '#059669', c.id, NOW()
+      FROM companies c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pipeline_stages ps WHERE ps.company_id = c.id AND ps.name = 'Da Fatturare'
+      );
+    `);
   } finally {
     client.release();
   }
