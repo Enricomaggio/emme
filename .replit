@@ -46,6 +46,13 @@ expertMode = true
 
 [userenv.development]
 
+[userenv.shared]
+VITE_APP_NAME = "GDM Lattonerie"
+VITE_MODULE_PONTEGGI = "false"
+VITE_MODULE_PROXIT = "false"
+VITE_MODULE_AMMINISTRAZIONE = "false"
+VITE_QUOTE_EDITOR_TYPE = "standard"
+
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 120000
