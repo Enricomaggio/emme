@@ -1599,8 +1599,7 @@ function ProiezioneFinanziaria() {
   const [numMesi, setNumMesi] = useState<3 | 6 | 12>(6);
 
   const { data, isLoading } = useQuery<{ isMock: boolean; mesi: ProiezioneMese[] }>({
-    queryKey: ["/api/superbill/proiezione", numMesi],
-    queryFn: () => fetch(`/api/superbill/proiezione?mesi=${numMesi}`, { credentials: "include" }).then((r) => r.json()),
+    queryKey: [`/api/superbill/proiezione?mesi=${numMesi}`],
   });
 
   const mesi = data?.mesi || [];
