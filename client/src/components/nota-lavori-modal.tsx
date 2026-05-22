@@ -58,7 +58,11 @@ export function NotaLavoriModal({ opportunityId, open, onOpenChange }: Props) {
     enabled: open,
   });
 
-  const quote = quotes.find((q) => WO_STATUSES.includes(q.status as any)) ?? quotes[0];
+  // Priorità: preventivo in stato WO > ACCEPTED > qualsiasi altro
+  const quote =
+    quotes.find((q) => WO_STATUSES.includes(q.status as any)) ??
+    quotes.find((q) => q.status === "DRAFT" || q.status === "SENT") ??
+    quotes[0];
   const status = quote?.status ?? "";
   const cfg = statusConfig[status];
 
@@ -113,8 +117,25 @@ export function NotaLavoriModal({ opportunityId, open, onOpenChange }: Props) {
 
         {!isLoading && !quote && (
           <p className="text-sm text-muted-foreground py-4">
-            Nessun preventivo accettato trovato per questa opportunità.
+            Nessun preventivo trovato per questa opportunità. Crea prima un preventivo.
           </p>
+        )}
+
+        {/* Preventivo esiste ma non è ancora accettato */}
+        {!isLoading && quote && !cfg && (
+          <div className="space-y-3 py-2">
+            <div className="flex items-start gap-2 rounded-md border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 p-3">
+              <Ban className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
+              <div className="text-sm text-yellow-800 dark:text-yellow-300">
+                <p className="font-medium">Preventivo non ancora accettato</p>
+                <p className="text-xs mt-1">Il preventivo <strong>{quote.number}</strong> è in stato «{quote.status === "DRAFT" ? "Bozza" : "Inviato"}». Per avviare la nota lavori devi prima accettarlo dall'editor del preventivo.</p>
+              </div>
+            </div>
+            <Button variant="outline" className="w-full" onClick={() => { onOpenChange(false); window.location.href = `/quotes/${quote.id}`; }}>
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Apri preventivo {quote.number}
+            </Button>
+          </div>
         )}
 
         {!isLoading && quote && cfg && (

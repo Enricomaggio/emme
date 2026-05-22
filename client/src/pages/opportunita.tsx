@@ -1364,14 +1364,9 @@ export default function OpportunitaPage() {
     return postWonNames.some(n => stage?.name === n);
   };
 
-  const hasNotaLavori = (stageId: string) => {
-    return isPostWonStage(stageId) && opportunityQuotes.some(q =>
-      q.status === "ACCEPTED" ||
-      q.status === "WORK_ORDER_DRAFT" ||
-      q.status === "WORK_ORDER_SENT" ||
-      q.status === "WORK_ORDER_CONFIRMED"
-    );
-  };
+  // Il bottone NL è visibile in tutti gli stadi post-vendita, indipendentemente
+  // dallo status del preventivo (il modal gestisce i casi limite).
+  const hasNotaLavori = (stageId: string) => isPostWonStage(stageId);
 
   useEffect(() => {
     if (watchStageId && !isLostStage(watchStageId)) {
