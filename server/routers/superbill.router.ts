@@ -202,6 +202,43 @@ function buildMockFatturePerCliente(leadId: string) {
   return base.slice(0, seed + 1);
 }
 
+/** Proiezione flusso di cassa mensile mock per i prossimi 6 mesi */
+function buildMockProiezione() {
+  const now = new Date();
+  const scadenze = buildMockScadenze();
+
+  // Mesi base dai dati mock
+  const map: Record<string, { entrate: number; uscite: number }> = {};
+
+  for (const s of scadenze) {
+    if (s.stato === "SCADUTA") continue; // escludiamo le già scadute dalla proiezione
+    const d = new Date(s.dataScadenza);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!map[key]) map[key] = { entrate: 0, uscite: 0 };
+    if (s.tipo === "ATTIVA") map[key].entrate += s.importo;
+    else map[key].uscite += s.importo;
+  }
+
+  // Genera i 6 mesi futuri (compreso il corrente) con dati simulati per quelli non coperti
+  const simulatedEntrate = [8200, 12400, 6800, 9500, 11200, 7600];
+  const simulatedUscite   = [4100,  5800, 3200, 4800,  6300, 3900];
+
+  const months: { mese: string; entrate: number; uscite: number }[] = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString("it-IT", { month: "short", year: "numeric" });
+    const existing = map[key];
+    months.push({
+      mese: label.charAt(0).toUpperCase() + label.slice(1),
+      entrate: existing ? existing.entrate + simulatedEntrate[i] * 0.3 : simulatedEntrate[i],
+      uscite:  existing ? existing.uscite  + simulatedUscite[i]  * 0.3 : simulatedUscite[i],
+    });
+  }
+
+  return months;
+}
+
 // ─── Superbill Real API Helper ────────────────────────────────────────────────
 
 async function superbillFetch(path: string, options: RequestInit = {}) {
@@ -418,6 +455,72 @@ superbillRouter.get("/superbill/scadenze", isAuthenticated, async (req, res) => 
   } catch (error) {
     console.error("Superbill scadenze error:", error);
     res.status(500).json({ message: "Errore nel recupero delle scadenze" });
+  }
+});
+
+/**
+ * GET /api/superbill/proiezione
+ * Restituisce la proiezione mensile del flusso di cassa per i prossimi 6 mesi.
+ */
+superbillRouter.get("/superbill/proiezione", isAuthenticated, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user!;
+    const userCompany = await resolveUserCompany(userId, role, req);
+    if (!userCompany) return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+
+    if (IS_MOCK) {
+      return res.json({ isMock: true, mesi: buildMockProiezione() });
+    }
+
+    // REAL MODE — aggrega le scadenze reali per mese (ATTIVA = entrate, PASSIVA = uscite)
+    const now = new Date();
+    const years = [now.getFullYear(), now.getFullYear() + 1];
+
+    // tipoDocumento=3 → fatture emesse (ATTIVA / entrate)
+    // tipoDocumento=1 → fatture ricevute/acquisto (PASSIVA / uscite)
+    const fetches = years.flatMap((anno) => [
+      superbillFetch(`/api/v1/documenti/${SUPERBILL_ARCHIVE_ID}?tipoDocumento=3&anno=${anno}`)
+        .then((r) => ({ tipo: "ATTIVA" as const, items: r?.items || [] }))
+        .catch(() => ({ tipo: "ATTIVA" as const, items: [] })),
+      superbillFetch(`/api/v1/documenti/${SUPERBILL_ARCHIVE_ID}?tipoDocumento=1&anno=${anno}`)
+        .then((r) => ({ tipo: "PASSIVA" as const, items: r?.items || [] }))
+        .catch(() => ({ tipo: "PASSIVA" as const, items: [] })),
+    ]);
+
+    const results = await Promise.all(fetches);
+    const map: Record<string, { entrate: number; uscite: number }> = {};
+
+    for (const { tipo, items } of results) {
+      for (const doc of items) {
+        const scad = doc.datiScadenze || [];
+        for (const s of scad) {
+          const d = new Date(s.dataScadenza);
+          if (d < now) continue;
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          if (!map[key]) map[key] = { entrate: 0, uscite: 0 };
+          if (tipo === "ATTIVA") map[key].entrate += s.importo || 0;
+          else map[key].uscite += s.importo || 0;
+        }
+      }
+    }
+
+    const mesi = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("it-IT", { month: "short", year: "numeric" });
+      const entry = map[key] || { entrate: 0, uscite: 0 };
+      mesi.push({
+        mese: label.charAt(0).toUpperCase() + label.slice(1),
+        entrate: entry.entrate,
+        uscite: entry.uscite,
+      });
+    }
+
+    res.json({ isMock: false, mesi });
+  } catch (error) {
+    console.error("Superbill proiezione error:", error);
+    res.status(500).json({ message: "Errore nel calcolo della proiezione" });
   }
 });
 

@@ -1587,6 +1587,87 @@ function SalesAgentDashboard({
   );
 }
 
+// ─── Proiezione Flusso di Cassa (Superbill) ──────────────────────────────────
+
+interface ProiezioneMese {
+  mese: string;
+  entrate: number;
+  uscite: number;
+}
+
+function ProiezioneFinanziaria() {
+  const { data, isLoading } = useQuery<{ isMock: boolean; mesi: ProiezioneMese[] }>({
+    queryKey: ["/api/superbill/proiezione"],
+  });
+
+  const mesi = data?.mesi || [];
+  const isMock = data?.isMock ?? true;
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm space-y-1">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        {payload.map((entry: any) => (
+          <div key={entry.name} className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+            <span className="text-muted-foreground">{entry.name}:</span>
+            <span className="font-medium text-foreground">{fmt(entry.value)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Banknote className="w-5 h-5 text-primary" />
+          Proiezione Flusso di Cassa
+          {isMock && (
+            <span className="text-xs font-normal text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full">
+              DEMO
+            </span>
+          )}
+          <span className="text-xs font-normal text-muted-foreground ml-1">prossimi 6 mesi</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-56 w-full" />
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={mesi} margin={{ top: 4, right: 8, left: 8, bottom: 4 }} barCategoryGap="30%">
+              <XAxis dataKey="mese" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+              <YAxis
+                tickFormatter={(v) =>
+                  new Intl.NumberFormat("it-IT", { notation: "compact", maximumFractionDigits: 0 }).format(v)
+                }
+                tick={{ fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                width={52}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend
+                formatter={(value) => (
+                  <span className="text-xs text-muted-foreground">{value}</span>
+                )}
+              />
+              <Bar dataKey="entrate" name="Entrate" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="uscite" name="Uscite" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Scadenze Finanziarie (Superbill) ────────────────────────────────────────
 
 interface ScadenzaFinanziaria {
@@ -2732,6 +2813,9 @@ function AdminDashboard({
 
       {/* Scadenze Finanziarie Superbill */}
       <ScadenzeFinanziarie />
+
+      {/* Proiezione Flusso di Cassa Superbill */}
+      <ProiezioneFinanziaria />
     </div>
   );
 }
