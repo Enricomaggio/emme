@@ -1,14 +1,17 @@
-import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useLocation } from "wouter";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Loader2, ClipboardCheck, Send, CheckCircle2, FileCheck } from "lucide-react";
-import type { Quote, QuoteItem } from "@shared/schema";
+import { Loader2, ClipboardCheck, ExternalLink, CheckCircle2, FileCheck, Ban } from "lucide-react";
+import type { Quote } from "@shared/schema";
 
 interface Props {
   opportunityId: string;
@@ -16,53 +19,48 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  ACCEPTED:             { label: "Preventivo accettato",    color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
-  WORK_ORDER_DRAFT:     { label: "Nota lavori in bozza",    color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
-  WORK_ORDER_SENT:      { label: "Nota lavori inviata",     color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
-  WORK_ORDER_CONFIRMED: { label: "Pronta per fatturazione", color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400" },
+const WO_STATUSES = ["ACCEPTED", "WORK_ORDER_DRAFT", "WORK_ORDER_SENT", "WORK_ORDER_CONFIRMED"] as const;
+
+const statusConfig: Record<string, { label: string; cls: string; description: string }> = {
+  ACCEPTED: {
+    label: "Preventivo accettato",
+    cls: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+    description: "Il preventivo è stato accettato. Avvia la nota lavori per iniziare il cantiere.",
+  },
+  WORK_ORDER_DRAFT: {
+    label: "Nota lavori in bozza",
+    cls: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+    description: "La nota lavori è in bozza. Aprila per modificare le voci, aggiungerne di nuove o eliminarle, poi scarica il PDF e inviala al cliente.",
+  },
+  WORK_ORDER_SENT: {
+    label: "Nota lavori inviata",
+    cls: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+    description: "La nota lavori è stata inviata al cliente. Quando è confermata, premi il pulsante qui sotto.",
+  },
+  WORK_ORDER_CONFIRMED: {
+    label: "Pronta per fatturazione",
+    cls: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+    description: "La nota lavori è confermata. L'opportunità è passata in «Da Fatturare».",
+  },
 };
 
-function fmtQty(val: string | null | undefined): string {
-  if (!val) return "—";
-  const n = parseFloat(val);
-  return isNaN(n) ? val : n.toLocaleString("it-IT", { maximumFractionDigits: 2 });
-}
-
-function fmtCurrency(val: string | null | undefined): string {
-  if (!val) return "—";
-  const n = parseFloat(val);
-  if (isNaN(n)) return val;
-  return `€ ${n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtDate(d: string | Date | null | undefined) {
+  if (!d) return null;
+  return new Date(d).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" });
 }
 
 export function NotaLavoriModal({ opportunityId, open, onOpenChange }: Props) {
   const { toast } = useToast();
-  const [notes, setNotes] = useState("");
-  const [quantityOverrides, setQuantityOverrides] = useState<Record<string, string>>({});
+  const [, navigate] = useLocation();
 
-  const { data: quotes = [], isLoading: isLoadingList } = useQuery<Quote[]>({
+  const { data: quotes = [], isLoading } = useQuery<Quote[]>({
     queryKey: ["/api/opportunities", opportunityId, "quotes"],
     enabled: open,
   });
 
-  // Prendi il primo preventivo rilevante (ACCEPTED o in stato WO)
-  const quoteRef = quotes.find(q =>
-    q.status === "ACCEPTED" ||
-    q.status === "WORK_ORDER_DRAFT" ||
-    q.status === "WORK_ORDER_SENT" ||
-    q.status === "WORK_ORDER_CONFIRMED"
-  ) ?? quotes[0];
-
-  // Fetch completo con items
-  const { data: quoteDetail, isLoading: isLoadingDetail } = useQuery<Quote & { items: QuoteItem[] }>({
-    queryKey: ["/api/quotes", quoteRef?.id],
-    enabled: !!quoteRef?.id && open,
-  });
-
-  const isLoading = isLoadingList || isLoadingDetail;
-  const quote = quoteDetail ?? quoteRef;
-  const items: QuoteItem[] = (quoteDetail as any)?.items ?? [];
+  const quote = quotes.find((q) => WO_STATUSES.includes(q.status as any)) ?? quotes[0];
+  const status = quote?.status ?? "";
+  const cfg = statusConfig[status];
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/opportunities", opportunityId, "quotes"] });
@@ -71,44 +69,39 @@ export function NotaLavoriModal({ opportunityId, open, onOpenChange }: Props) {
 
   const startMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/quotes/${quote!.id}/work-order/start`),
-    onSuccess: () => { invalidate(); toast({ title: "Nota lavori avviata" }); },
-    onError: () => toast({ title: "Errore", description: "Impossibile avviare la nota lavori", variant: "destructive" }),
-  });
-
-  const sendMutation = useMutation({
-    mutationFn: async () => {
-      // Prima salva le quantità override
-      await Promise.all(
-        Object.entries(quantityOverrides).map(([itemId, qty]) =>
-          apiRequest("PATCH", `/api/quote-items/${itemId}/work-order-quantity`, {
-            quantity: qty === "" ? null : parseFloat(qty),
-          })
-        )
-      );
-      return apiRequest("POST", `/api/quotes/${quote!.id}/work-order/send`, { notes });
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Nota lavori avviata", description: "Ora puoi aprire l'editor per modificare le voci." });
     },
-    onSuccess: () => { invalidate(); toast({ title: "Nota lavori segnata come inviata" }); },
-    onError: () => toast({ title: "Errore", description: "Impossibile inviare la nota lavori", variant: "destructive" }),
+    onError: () => toast({ title: "Errore", description: "Impossibile avviare la nota lavori", variant: "destructive" }),
   });
 
   const confirmMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/quotes/${quote!.id}/work-order/confirm`),
-    onSuccess: () => { invalidate(); toast({ title: "Nota lavori confermata — pronta per fatturazione" }); },
-    onError: () => toast({ title: "Errore", description: "Impossibile confermare la nota lavori", variant: "destructive" }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Nota lavori confermata", description: "L'opportunità è passata in «Da Fatturare»." });
+    },
+    onError: () => toast({ title: "Errore", description: "Impossibile confermare", variant: "destructive" }),
   });
 
-  const isPending = startMutation.isPending || sendMutation.isPending || confirmMutation.isPending;
+  function openEditor() {
+    onOpenChange(false);
+    navigate(`/quotes/${quote!.id}?nl=true`);
+  }
 
-  const statusInfo = quote ? statusConfig[quote.status] : null;
+  const isPending = startMutation.isPending || confirmMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <FileCheck className="w-4 h-4" />
+            <FileCheck className="w-4 h-4 text-indigo-500" />
             Nota Lavori
-            {quote && <span className="font-normal text-muted-foreground">— {quote.number}</span>}
+            {quote && (
+              <span className="font-normal text-muted-foreground text-sm">— {quote.number}</span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -124,142 +117,80 @@ export function NotaLavoriModal({ opportunityId, open, onOpenChange }: Props) {
           </p>
         )}
 
-        {!isLoading && quote && (
-          <div className="space-y-4">
-            {statusInfo && (
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                {statusInfo.label}
-              </span>
-            )}
+        {!isLoading && quote && cfg && (
+          <div className="space-y-4 py-2">
+            {/* Badge stato */}
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cfg.cls}`}>
+              {cfg.label}
+            </span>
 
-            {/* Tabella voci */}
-            <div className="border rounded-md overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60">
-                  <tr>
-                    <th className="text-left p-2.5 font-medium text-xs">Descrizione</th>
-                    <th className="text-right p-2.5 font-medium text-xs w-24">Qtà orig.</th>
-                    {quote.status === "WORK_ORDER_DRAFT" && (
-                      <th className="text-right p-2.5 font-medium text-xs w-28">Qtà NL</th>
-                    )}
-                    <th className="text-right p-2.5 font-medium text-xs w-20">U.M.</th>
-                    <th className="text-right p-2.5 font-medium text-xs w-24">Totale</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {items.map((item) => {
-                    const override = quantityOverrides[item.id];
-                    const displayQty = item.workOrderQuantityOverride ?? item.quantity;
-                    return (
-                      <tr key={item.id} className="hover:bg-muted/20">
-                        <td className="p-2.5 text-xs">
-                          {item.description || "—"}
-                        </td>
-                        <td className="p-2.5 text-xs text-right text-muted-foreground">
-                          {fmtQty(item.quantity)}
-                        </td>
-                        {quote.status === "WORK_ORDER_DRAFT" && (
-                          <td className="p-2.5 text-right">
-                            <Input
-                              type="number"
-                              step="any"
-                              className="h-7 text-xs text-right w-24 ml-auto"
-                              placeholder={fmtQty(item.quantity)}
-                              value={override ?? (item.workOrderQuantityOverride ?? "")}
-                              onChange={(e) =>
-                                setQuantityOverrides((prev) => ({ ...prev, [item.id]: e.target.value }))
-                              }
-                            />
-                          </td>
-                        )}
-                        <td className="p-2.5 text-xs text-right text-muted-foreground">
-                          {item.unitOfMeasure || "—"}
-                        </td>
-                        <td className="p-2.5 text-xs text-right font-medium">
-                          {fmtCurrency(item.totalRow)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {items.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="p-4 text-center text-xs text-muted-foreground">
-                        Nessuna voce
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {/* Descrizione contestuale */}
+            <p className="text-sm text-muted-foreground leading-relaxed">{cfg.description}</p>
 
-            {/* Note (editabili solo in bozza) */}
-            {(quote.status === "WORK_ORDER_DRAFT" || quote.status === "WORK_ORDER_SENT" || quote.status === "WORK_ORDER_CONFIRMED") && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Note nota lavori
-                </label>
-                {quote.status === "WORK_ORDER_DRAFT" ? (
-                  <Textarea
-                    className="text-sm min-h-[80px]"
-                    placeholder="Aggiungi note per il cliente..."
-                    value={notes || quote.workOrderNotes || ""}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground bg-muted/40 rounded p-2">
-                    {quote.workOrderNotes || "—"}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Date conferma */}
+            {/* Date */}
             {quote.workOrderSentAt && (
               <p className="text-xs text-muted-foreground">
-                Inviata il {new Date(quote.workOrderSentAt).toLocaleDateString("it-IT")}
+                📤 Inviata il {fmtDate(quote.workOrderSentAt)}
               </p>
             )}
             {quote.workOrderConfirmedAt && (
               <p className="text-xs text-muted-foreground">
-                Confermata il {new Date(quote.workOrderConfirmedAt).toLocaleDateString("it-IT")}
+                ✅ Confermata il {fmtDate(quote.workOrderConfirmedAt)}
               </p>
+            )}
+
+            {/* Totale */}
+            {quote.totalAmount && (
+              <div className="flex items-center justify-between rounded-md border px-3 py-2 bg-muted/30">
+                <span className="text-xs text-muted-foreground">Importo preventivo</span>
+                <span className="text-sm font-semibold">
+                  € {parseFloat(quote.totalAmount).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
             )}
           </div>
         )}
 
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Chiudi</Button>
+        <DialogFooter className="flex-col gap-2 sm:flex-row sm:gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="sm:mr-auto">
+            Chiudi
+          </Button>
 
-          {quote?.status === "ACCEPTED" && (
-            <Button
-              onClick={() => startMutation.mutate()}
-              disabled={isPending}
-              data-testid="button-work-order-start"
-            >
+          {/* ACCEPTED → Avvia NL */}
+          {status === "ACCEPTED" && (
+            <Button onClick={() => startMutation.mutate()} disabled={isPending} data-testid="button-nl-start">
               {startMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ClipboardCheck className="w-4 h-4 mr-2" />}
               Avvia Nota Lavori
             </Button>
           )}
 
-          {quote?.status === "WORK_ORDER_DRAFT" && (
-            <Button
-              onClick={() => sendMutation.mutate()}
-              disabled={isPending}
-              data-testid="button-work-order-send"
-            >
-              {sendMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-              Segna come Inviata
+          {/* DRAFT → Apri editor (pagina intera, con tutto) */}
+          {status === "WORK_ORDER_DRAFT" && (
+            <Button onClick={openEditor} data-testid="button-nl-open-editor">
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Apri editor Nota Lavori
             </Button>
           )}
 
-          {quote?.status === "WORK_ORDER_SENT" && (
-            <Button
-              onClick={() => confirmMutation.mutate()}
-              disabled={isPending}
-              data-testid="button-work-order-confirm"
-            >
-              {confirmMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-              Conferma Nota Lavori
+          {/* SENT → Apri editor (sola lettura utile) + Conferma */}
+          {status === "WORK_ORDER_SENT" && (
+            <>
+              <Button variant="outline" onClick={openEditor} data-testid="button-nl-view">
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Visualizza / PDF
+              </Button>
+              <Button onClick={() => confirmMutation.mutate()} disabled={isPending} data-testid="button-nl-confirm">
+                {confirmMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                Conferma Nota Lavori
+              </Button>
+            </>
+          )}
+
+          {/* CONFIRMED → solo visualizzazione */}
+          {status === "WORK_ORDER_CONFIRMED" && (
+            <Button variant="outline" onClick={openEditor} data-testid="button-nl-view-confirmed">
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Visualizza PDF
             </Button>
           )}
         </DialogFooter>

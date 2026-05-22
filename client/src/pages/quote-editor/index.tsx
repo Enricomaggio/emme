@@ -10,9 +10,12 @@ import {
   ArrowUp,
   ArrowDown,
   FileText,
+  FileCheck,
   Save,
   Loader2,
   Pencil,
+  Send,
+  CheckCircle2,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { QuotePdfActions } from "@/pdf/QuotePdfActions";
@@ -62,6 +65,9 @@ export default function QuoteEditorPage() {
   const isNew = location.startsWith("/opportunities/");
   const opportunityIdFromRoute = isNew ? params.id : null;
   const quoteId = isNew ? null : params.id;
+
+  // Nota Lavori mode: ?nl=true nell'URL
+  const isNLMode = new URLSearchParams(window.location.search).get("nl") === "true";
 
   const [items, setItems] = useState<QuoteItemDraft[]>([]);
   const [subject, setSubject] = useState("");
@@ -349,6 +355,27 @@ export default function QuoteEditorPage() {
     },
   });
 
+  // ─── Nota Lavori mutations (NL mode only) ────────────────────────────────
+  const nlSendMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/quotes/${quoteId}/work-order/send`),
+    onSuccess: () => {
+      toast({ title: "Nota lavori segnata come inviata" });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      if (opportunityId) queryClient.invalidateQueries({ queryKey: ["/api/opportunities", opportunityId, "quotes"] });
+    },
+    onError: () => toast({ title: "Errore", description: "Impossibile aggiornare lo stato", variant: "destructive" }),
+  });
+
+  const nlConfirmMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/quotes/${quoteId}/work-order/confirm`),
+    onSuccess: () => {
+      toast({ title: "Nota lavori confermata — pronta per fatturazione" });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      if (opportunityId) queryClient.invalidateQueries({ queryKey: ["/api/opportunities", opportunityId, "quotes"] });
+    },
+    onError: () => toast({ title: "Errore", description: "Impossibile confermare", variant: "destructive" }),
+  });
+
   function moveItem(uid: string, dir: -1 | 1) {
     setItems((prev) => {
       const idx = prev.findIndex((i) => i.uid === uid);
@@ -516,8 +543,10 @@ export default function QuoteEditorPage() {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            {isNew ? "Nuovo preventivo" : `Preventivo ${number}`}
+            {isNLMode ? <FileCheck className="w-5 h-5 text-indigo-500" /> : <FileText className="w-5 h-5" />}
+            {isNLMode
+              ? (isNew ? "Nuova Nota Lavori" : `Nota Lavori ${number}`)
+              : (isNew ? "Nuovo preventivo" : `Preventivo ${number}`)}
           </h1>
           {opportunityQuery.data && (
             <div className="text-sm text-muted-foreground">
@@ -527,20 +556,38 @@ export default function QuoteEditorPage() {
               </Link>
             </div>
           )}
+          {isNLMode && quoteQuery.data && (() => {
+            const s = quoteQuery.data.status;
+            const cfg: Record<string, { label: string; cls: string }> = {
+              WORK_ORDER_DRAFT:     { label: "Bozza",            cls: "bg-yellow-100 text-yellow-800 border-yellow-200" },
+              WORK_ORDER_SENT:      { label: "Inviata",          cls: "bg-blue-100 text-blue-800 border-blue-200" },
+              WORK_ORDER_CONFIRMED: { label: "Confermata",       cls: "bg-purple-100 text-purple-800 border-purple-200" },
+            };
+            const c = cfg[s];
+            return c ? (
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${c.cls}`}>
+                {c.label}
+              </span>
+            ) : null;
+          })()}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending || isLoading}
-            data-testid="button-save-quote"
-          >
-            {saveMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 mr-2" />
-            )}
-            Salva preventivo
-          </Button>
+          {/* Salva */}
+          {(!isNLMode || quoteQuery.data?.status === "WORK_ORDER_DRAFT") && (
+            <Button
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending || isLoading}
+              data-testid="button-save-quote"
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              {isNLMode ? "Salva Nota Lavori" : "Salva preventivo"}
+            </Button>
+          )}
+          {/* PDF / Email — sempre disponibili */}
           {!isNew && quoteQuery.data && (
             <QuotePdfActions
               quote={buildPdfQuote(quoteQuery.data)}
@@ -553,6 +600,32 @@ export default function QuoteEditorPage() {
               }}
               disabled={saveMutation.isPending}
             />
+          )}
+          {/* NL: Segna come Inviata (salva prima, poi transiziona) */}
+          {isNLMode && quoteQuery.data?.status === "WORK_ORDER_DRAFT" && (
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await saveMutation.mutateAsync();
+                nlSendMutation.mutate();
+              }}
+              disabled={saveMutation.isPending || nlSendMutation.isPending}
+              data-testid="button-nl-send"
+            >
+              {(saveMutation.isPending || nlSendMutation.isPending) ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+              Segna come Inviata
+            </Button>
+          )}
+          {/* NL: Conferma */}
+          {isNLMode && quoteQuery.data?.status === "WORK_ORDER_SENT" && (
+            <Button
+              onClick={() => nlConfirmMutation.mutate()}
+              disabled={nlConfirmMutation.isPending}
+              data-testid="button-nl-confirm"
+            >
+              {nlConfirmMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+              Conferma Nota Lavori
+            </Button>
           )}
         </div>
       </div>
