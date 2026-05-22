@@ -1732,3 +1732,61 @@ export type InsertCatalogArticle = z.infer<typeof insertCatalogArticleSchema>;
 
 export type LaborRate = typeof laborRates.$inferSelect;
 export type InsertLaborRate = z.infer<typeof insertLaborRateSchema>;
+
+// ========== NOTA LAVORI (Tabelle dedicate) ==========
+
+export const workOrderStatusEnum = ["DRAFT", "SENT", "CONFIRMED"] as const;
+export type WorkOrderStatus = typeof workOrderStatusEnum[number];
+
+export const workOrders = pgTable("work_orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  opportunityId: varchar("opportunity_id").notNull().references(() => opportunities.id),
+  quoteId: varchar("quote_id").references(() => quotes.id),
+  number: text("number").notNull(),
+  subject: text("subject"),
+  notes: text("notes"),
+  totalAmount: numeric("total_amount").notNull().default("0"),
+  status: text("status").$type<WorkOrderStatus>().notNull().default("DRAFT"),
+  sentAt: timestamp("sent_at"),
+  confirmedAt: timestamp("confirmed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("work_orders_company_id_idx").on(table.companyId),
+  index("work_orders_opportunity_id_idx").on(table.opportunityId),
+]);
+
+export const workOrderItems = pgTable("work_order_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workOrderId: varchar("work_order_id").notNull().references(() => workOrders.id, { onDelete: "cascade" }),
+  description: text("description").notNull().default(""),
+  unitOfMeasure: text("unit_of_measure").notNull().default("ml"),
+  quantity: numeric("quantity").notNull().default("0"),
+  unitPrice: numeric("unit_price").notNull().default("0"),
+  totalRow: numeric("total_row").notNull().default("0"),
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("work_order_items_work_order_id_idx").on(table.workOrderId),
+]);
+
+export const workOrdersRelations = relations(workOrders, ({ one, many }) => ({
+  company: one(companies, { fields: [workOrders.companyId], references: [companies.id] }),
+  opportunity: one(opportunities, { fields: [workOrders.opportunityId], references: [opportunities.id] }),
+  quote: one(quotes, { fields: [workOrders.quoteId], references: [quotes.id] }),
+  items: many(workOrderItems),
+}));
+
+export const workOrderItemsRelations = relations(workOrderItems, ({ one }) => ({
+  workOrder: one(workOrders, { fields: [workOrderItems.workOrderId], references: [workOrders.id] }),
+}));
+
+export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertWorkOrderItemSchema = createInsertSchema(workOrderItems).omit({ id: true, createdAt: true });
+
+export type WorkOrder = typeof workOrders.$inferSelect;
+export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
+export type WorkOrderItem = typeof workOrderItems.$inferSelect;
+export type InsertWorkOrderItem = z.infer<typeof insertWorkOrderItemSchema>;
+export type WorkOrderWithItems = WorkOrder & { items: WorkOrderItem[] };

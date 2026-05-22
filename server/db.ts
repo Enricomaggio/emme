@@ -512,6 +512,45 @@ export async function bootstrapDatabase(): Promise<void> {
         SELECT 1 FROM pipeline_stages ps WHERE ps.company_id = c.id AND ps.name = 'Da Fatturare'
       );
     `);
+
+    // Migration 0029: tabelle dedicate nota lavori (work_orders, work_order_items)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS work_orders (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id),
+        opportunity_id VARCHAR NOT NULL REFERENCES opportunities(id),
+        quote_id VARCHAR REFERENCES quotes(id),
+        number TEXT NOT NULL,
+        subject TEXT,
+        notes TEXT,
+        total_amount NUMERIC NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'DRAFT',
+        sent_at TIMESTAMP,
+        confirmed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS work_orders_company_id_idx ON work_orders(company_id);
+      CREATE INDEX IF NOT EXISTS work_orders_opportunity_id_idx ON work_orders(opportunity_id);
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS work_order_items (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        work_order_id VARCHAR NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+        description TEXT NOT NULL DEFAULT '',
+        unit_of_measure TEXT NOT NULL DEFAULT 'ml',
+        quantity NUMERIC NOT NULL DEFAULT 0,
+        unit_price NUMERIC NOT NULL DEFAULT 0,
+        total_row NUMERIC NOT NULL DEFAULT 0,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS work_order_items_work_order_id_idx ON work_order_items(work_order_id);
+    `);
   } finally {
     client.release();
   }

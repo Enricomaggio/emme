@@ -3169,6 +3169,7 @@ export default function OpportunitaPage() {
         {selectedOpportunity && (
           <NotaLavoriModal
             opportunityId={selectedOpportunity.id}
+            opportunityTitle={selectedOpportunity.title}
             open={isNotaLavoriOpen}
             onOpenChange={setIsNotaLavoriOpen}
           />

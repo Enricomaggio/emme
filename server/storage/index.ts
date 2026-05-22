@@ -14,6 +14,7 @@ import { workforceStorage } from "./workforce";
 import { settingsStorage } from "./settings";
 import { notificationsStorage } from "./notifications";
 import { analyticsStorage } from "./analytics";
+import { workOrdersStorage } from "./workOrders";
 
 // ============ Aggregated storage object ============
 // Spread order: later domains override earlier ones for any accidental name collision.
@@ -32,6 +33,7 @@ export const storage = {
   ...settingsStorage,
   ...notificationsStorage,
   ...analyticsStorage,
+  ...workOrdersStorage,
 };
 
 export type IStorage = typeof storage;

@@ -15,6 +15,7 @@ import { quotesRouter } from "./routers/quotes.router";
 import { paymentMethodsRouter } from "./routers/payment-methods.router";
 import { dashboardRouter } from "./routers/dashboard.router";
 import { superbillRouter } from "./routers/superbill.router";
+import { workOrdersRouter } from "./routers/work-orders.router";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -35,6 +36,7 @@ export async function registerRoutes(
   app.use('/api', paymentMethodsRouter);
   app.use('/api', dashboardRouter);
   app.use('/api', superbillRouter);
+  app.use('/api', workOrdersRouter);
 
   return httpServer;
 }

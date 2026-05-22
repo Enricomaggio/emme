@@ -1,7 +1,8 @@
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { pdf } from "@react-pdf/renderer";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
 import {
   Dialog,
   DialogContent,
@@ -10,209 +11,606 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, ClipboardCheck, ExternalLink, CheckCircle2, FileCheck, Ban } from "lucide-react";
-import type { Quote } from "@shared/schema";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Loader2,
+  FileCheck,
+  Plus,
+  Trash2,
+  Download,
+  Save,
+  ClipboardList,
+} from "lucide-react";
+import type { WorkOrderWithItems, Quote, Company } from "@shared/schema";
+import { WorkOrderPdfDocument } from "@/pdf/WorkOrderPdfDocument";
 
 interface Props {
   opportunityId: string;
+  opportunityTitle?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const WO_STATUSES = ["ACCEPTED", "WORK_ORDER_DRAFT", "WORK_ORDER_SENT", "WORK_ORDER_CONFIRMED"] as const;
-
-const statusConfig: Record<string, { label: string; cls: string; description: string }> = {
-  ACCEPTED: {
-    label: "Preventivo accettato",
-    cls: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-    description: "Il preventivo è stato accettato. Avvia la nota lavori per iniziare il cantiere.",
-  },
-  WORK_ORDER_DRAFT: {
-    label: "Nota lavori in bozza",
-    cls: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-    description: "La nota lavori è in bozza. Aprila per modificare le voci, aggiungerne di nuove o eliminarle, poi scarica il PDF e inviala al cliente.",
-  },
-  WORK_ORDER_SENT: {
-    label: "Nota lavori inviata",
-    cls: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    description: "La nota lavori è stata inviata al cliente. Quando è confermata, premi il pulsante qui sotto.",
-  },
-  WORK_ORDER_CONFIRMED: {
-    label: "Pronta per fatturazione",
-    cls: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-    description: "La nota lavori è confermata. L'opportunità è passata in «Da Fatturare».",
-  },
-};
-
-function fmtDate(d: string | Date | null | undefined) {
-  if (!d) return null;
-  return new Date(d).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" });
+interface LocalItem {
+  _key: string; // local-only key for React list rendering
+  description: string;
+  unitOfMeasure: string;
+  quantity: string;
+  unitPrice: string;
+  totalRow: string;
+  displayOrder: number;
 }
 
-export function NotaLavoriModal({ opportunityId, open, onOpenChange }: Props) {
-  const { toast } = useToast();
-  const [, navigate] = useLocation();
+function newKey() {
+  return Math.random().toString(36).slice(2);
+}
 
-  const { data: quotes = [], isLoading } = useQuery<Quote[]>({
-    queryKey: ["/api/opportunities", opportunityId, "quotes"],
+function computeTotal(qty: string, price: string): string {
+  const q = parseFloat(qty) || 0;
+  const p = parseFloat(price) || 0;
+  return (q * p).toFixed(2);
+}
+
+function fmtEuro(n: string | number | null | undefined): string {
+  const v = typeof n === "string" ? parseFloat(n) : (n ?? 0);
+  if (!isFinite(v as number)) return "0,00";
+  return (v as number).toLocaleString("it-IT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function woToLocalItems(wo: WorkOrderWithItems): LocalItem[] {
+  return wo.items.map((it, i) => ({
+    _key: newKey(),
+    description: it.description,
+    unitOfMeasure: it.unitOfMeasure,
+    quantity: it.quantity,
+    unitPrice: it.unitPrice,
+    totalRow: it.totalRow,
+    displayOrder: i,
+  }));
+}
+
+export function NotaLavoriModal({
+  opportunityId,
+  opportunityTitle,
+  open,
+  onOpenChange,
+}: Props) {
+  const { toast } = useToast();
+
+  // ── Remote data ─────────────────────────────────────────────────────────────
+  const { data: wo, isLoading: woLoading } = useQuery<WorkOrderWithItems | null>({
+    queryKey: ["/api/work-orders", { opportunityId }],
+    queryFn: () =>
+      apiRequest("GET", `/api/work-orders?opportunityId=${opportunityId}`).then(
+        (r) => r.json()
+      ),
     enabled: open,
   });
 
-  // Priorità: preventivo in stato WO > ACCEPTED > qualsiasi altro
-  const quote =
-    quotes.find((q) => WO_STATUSES.includes(q.status as any)) ??
-    quotes.find((q) => q.status === "DRAFT" || q.status === "SENT") ??
-    quotes[0];
-  const status = quote?.status ?? "";
-  const cfg = statusConfig[status];
+  const { data: quotes = [] } = useQuery<Quote[]>({
+    queryKey: ["/api/opportunities", opportunityId, "quotes"],
+    enabled: open && wo === null,
+  });
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/opportunities", opportunityId, "quotes"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/opportunities"] });
+  const { data: company } = useQuery<Company>({
+    queryKey: ["/api/company"],
+    enabled: open,
+  });
+
+  // ── Local editable state ─────────────────────────────────────────────────────
+  const [subject, setSubject] = useState("");
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<LocalItem[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+
+  // Sync local state when WO loads or modal opens
+  useEffect(() => {
+    if (wo) {
+      setSubject(wo.subject ?? "");
+      setNotes(wo.notes ?? "");
+      setItems(woToLocalItems(wo));
+      setIsDirty(false);
+    }
+  }, [wo]);
+
+  // Reset dirty when modal closes
+  useEffect(() => {
+    if (!open) {
+      setIsDirty(false);
+    }
+  }, [open]);
+
+  const woQueryKey = ["/api/work-orders", { opportunityId }];
+
+  // ── Mutations ────────────────────────────────────────────────────────────────
+  const createMutation = useMutation({
+    mutationFn: (payload: { opportunityId: string; quoteId?: string }) =>
+      apiRequest("POST", "/api/work-orders", payload).then((r) => r.json()),
+    onSuccess: (created: WorkOrderWithItems) => {
+      // Update cache directly — avoids flash back to "create" screen during re-fetch
+      queryClient.setQueryData(woQueryKey, created);
+      setSubject(created.subject ?? "");
+      setNotes(created.notes ?? "");
+      setItems(woToLocalItems(created));
+      setIsDirty(false);
+      toast({ title: "Nota lavori creata" });
+    },
+    onError: () =>
+      toast({
+        title: "Errore",
+        description: "Impossibile creare la nota lavori",
+        variant: "destructive",
+      }),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: {
+      id: string;
+      subject: string | null;
+      notes: string | null;
+      totalAmount: string;
+      items: Omit<LocalItem, "_key">[];
+    }) =>
+      apiRequest("PUT", `/api/work-orders/${payload.id}`, {
+        subject: payload.subject,
+        notes: payload.notes,
+        totalAmount: payload.totalAmount,
+        items: payload.items,
+      }).then((r) => r.json()),
+    onSuccess: (saved: WorkOrderWithItems) => {
+      queryClient.setQueryData(woQueryKey, saved);
+      setItems(woToLocalItems(saved));
+      setIsDirty(false);
+      toast({ title: "Nota lavori salvata" });
+    },
+    onError: () =>
+      toast({
+        title: "Errore",
+        description: "Impossibile salvare",
+        variant: "destructive",
+      }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("DELETE", `/api/work-orders/${id}`),
+    onSuccess: () => {
+      queryClient.setQueryData(woQueryKey, null);
+      setSubject("");
+      setNotes("");
+      setItems([]);
+      setIsDirty(false);
+      toast({ title: "Nota lavori eliminata" });
+    },
+    onError: () =>
+      toast({
+        title: "Errore",
+        description: "Impossibile eliminare",
+        variant: "destructive",
+      }),
+  });
+
+  // ── Items handlers ────────────────────────────────────────────────────────────
+  const addRow = () => {
+    setItems((prev) => [
+      ...prev,
+      {
+        _key: newKey(),
+        description: "",
+        unitOfMeasure: "ml",
+        quantity: "1",
+        unitPrice: "0",
+        totalRow: "0",
+        displayOrder: prev.length,
+      },
+    ]);
+    setIsDirty(true);
   };
 
-  const startMutation = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/quotes/${quote!.id}/work-order/start`),
-    onSuccess: () => {
-      invalidate();
-      toast({ title: "Nota lavori avviata", description: "Ora puoi aprire l'editor per modificare le voci." });
+  const removeRow = (key: string) => {
+    setItems((prev) => prev.filter((it) => it._key !== key));
+    setIsDirty(true);
+  };
+
+  const updateRow = useCallback(
+    (key: string, field: keyof Omit<LocalItem, "_key" | "displayOrder">, value: string) => {
+      setItems((prev) =>
+        prev.map((it) => {
+          if (it._key !== key) return it;
+          const updated = { ...it, [field]: value };
+          // Auto-compute total when qty or price changes
+          if (field === "quantity" || field === "unitPrice") {
+            updated.totalRow = computeTotal(
+              field === "quantity" ? value : it.quantity,
+              field === "unitPrice" ? value : it.unitPrice
+            );
+          }
+          return updated;
+        })
+      );
+      setIsDirty(true);
     },
-    onError: () => toast({ title: "Errore", description: "Impossibile avviare la nota lavori", variant: "destructive" }),
-  });
+    []
+  );
 
-  const confirmMutation = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/quotes/${quote!.id}/work-order/confirm`),
-    onSuccess: () => {
-      invalidate();
-      toast({ title: "Nota lavori confermata", description: "L'opportunità è passata in «Da Fatturare»." });
-    },
-    onError: () => toast({ title: "Errore", description: "Impossibile confermare", variant: "destructive" }),
-  });
+  // ── Computed totals ──────────────────────────────────────────────────────────
+  const subtotale = items.reduce((s, it) => s + (parseFloat(it.totalRow) || 0), 0);
+  const iva = subtotale * 0.22;
+  const totale = subtotale + iva;
 
-  function openEditor() {
-    onOpenChange(false);
-    navigate(`/quotes/${quote!.id}?nl=true`);
-  }
+  // ── Save handler ─────────────────────────────────────────────────────────────
+  const handleSave = () => {
+    if (!wo) return;
+    saveMutation.mutate({
+      id: wo.id,
+      subject: subject || null,
+      notes: notes || null,
+      totalAmount: subtotale.toFixed(2),
+      items: items.map(({ _key, ...rest }, i) => ({ ...rest, displayOrder: i })),
+    });
+  };
 
-  const isPending = startMutation.isPending || confirmMutation.isPending;
+  // ── PDF download ─────────────────────────────────────────────────────────────
+  const handleDownloadPdf = async () => {
+    if (!wo || !company) return;
 
+    // Build a "live" work order with current local state for the PDF
+    const liveWo: WorkOrderWithItems = {
+      ...wo,
+      subject: subject || null,
+      notes: notes || null,
+      totalAmount: subtotale.toFixed(2),
+      items: items.map(({ _key, ...rest }, i) => ({
+        id: newKey(),
+        workOrderId: wo.id,
+        createdAt: new Date(),
+        ...rest,
+        displayOrder: i,
+      })),
+    };
+
+    setPdfGenerating(true);
+    try {
+      const blob = await pdf(
+        <WorkOrderPdfDocument
+          company={company}
+          workOrder={liveWo}
+          opportunityTitle={opportunityTitle}
+        />
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `NL-${wo.number}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("PDF error:", e);
+      toast({
+        title: "Errore PDF",
+        description: "Impossibile generare il PDF",
+        variant: "destructive",
+      });
+    } finally {
+      setPdfGenerating(false);
+    }
+  };
+
+  // ── Derived ──────────────────────────────────────────────────────────────────
+  const acceptedQuote = quotes.find(
+    (q) => q.status === "ACCEPTED" || q.status?.startsWith("WORK_ORDER")
+  );
+  const isPending =
+    createMutation.isPending || saveMutation.isPending || deleteMutation.isPending;
+
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <FileCheck className="w-4 h-4 text-indigo-500" />
             Nota Lavori
-            {quote && (
-              <span className="font-normal text-muted-foreground text-sm">— {quote.number}</span>
+            {wo && (
+              <span className="font-normal text-muted-foreground text-sm">
+                — {wo.number}
+              </span>
             )}
           </DialogTitle>
         </DialogHeader>
 
-        {isLoading && (
-          <div className="flex items-center justify-center py-8">
+        {/* Loading */}
+        {woLoading && (
+          <div className="flex items-center justify-center py-12">
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>
         )}
 
-        {!isLoading && !quote && (
-          <p className="text-sm text-muted-foreground py-4">
-            Nessun preventivo trovato per questa opportunità. Crea prima un preventivo.
-          </p>
+        {/* Nessuna NL esistente → schermata creazione */}
+        {!woLoading && wo === null && (
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Non esiste ancora una nota lavori per questa opportunità.
+            </p>
+            <div className="flex flex-col gap-2">
+              {acceptedQuote && (
+                <Button
+                  onClick={() =>
+                    createMutation.mutate({
+                      opportunityId,
+                      quoteId: acceptedQuote.id,
+                    })
+                  }
+                  disabled={isPending}
+                  className="w-full justify-start"
+                >
+                  {createMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <ClipboardList className="w-4 h-4 mr-2" />
+                  )}
+                  Crea dal preventivo {acceptedQuote.number}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => createMutation.mutate({ opportunityId })}
+                disabled={isPending}
+                className="w-full justify-start"
+              >
+                {createMutation.isPending && !acceptedQuote ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4 mr-2" />
+                )}
+                Crea vuota
+              </Button>
+            </div>
+          </div>
         )}
 
-        {/* Preventivo esiste ma non è ancora accettato */}
-        {!isLoading && quote && !cfg && (
-          <div className="space-y-3 py-2">
-            <div className="flex items-start gap-2 rounded-md border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 p-3">
-              <Ban className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
-              <div className="text-sm text-yellow-800 dark:text-yellow-300">
-                <p className="font-medium">Preventivo non ancora accettato</p>
-                <p className="text-xs mt-1">Il preventivo <strong>{quote.number}</strong> è in stato «{quote.status === "DRAFT" ? "Bozza" : "Inviato"}». Per avviare la nota lavori devi prima accettarlo dall'editor del preventivo.</p>
+        {/* NL esistente → editor */}
+        {!woLoading && wo !== null && wo !== undefined && (
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+            {/* Oggetto */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Oggetto
+              </label>
+              <Input
+                value={subject}
+                onChange={(e) => {
+                  setSubject(e.target.value);
+                  setIsDirty(true);
+                }}
+                placeholder="es. Rifacimento grondaie — Via Roma 12, Treviso"
+              />
+            </div>
+
+            {/* Tabella righe */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Voci
+              </label>
+              <div className="rounded-md border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium w-[40%]">
+                        Descrizione
+                      </th>
+                      <th className="text-right px-3 py-2 font-medium w-[12%]">
+                        Quantità
+                      </th>
+                      <th className="text-right px-3 py-2 font-medium w-[10%]">
+                        U.M.
+                      </th>
+                      <th className="text-right px-3 py-2 font-medium w-[15%]">
+                        Prezzo unit.
+                      </th>
+                      <th className="text-right px-3 py-2 font-medium w-[15%]">
+                        Totale
+                      </th>
+                      <th className="w-[8%]" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="text-center text-muted-foreground py-6 text-sm"
+                        >
+                          Nessuna voce. Clicca «Aggiungi riga» per iniziare.
+                        </td>
+                      </tr>
+                    )}
+                    {items.map((item) => (
+                      <tr
+                        key={item._key}
+                        className="border-t hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="px-2 py-1">
+                          <Input
+                            value={item.description}
+                            onChange={(e) =>
+                              updateRow(item._key, "description", e.target.value)
+                            }
+                            placeholder="Descrizione"
+                            className="h-8 text-sm border-0 bg-transparent focus-visible:ring-1 focus-visible:ring-primary/40"
+                          />
+                        </td>
+                        <td className="px-2 py-1">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              updateRow(item._key, "quantity", e.target.value)
+                            }
+                            className="h-8 text-sm text-right border-0 bg-transparent focus-visible:ring-1 focus-visible:ring-primary/40"
+                          />
+                        </td>
+                        <td className="px-2 py-1">
+                          <Input
+                            value={item.unitOfMeasure}
+                            onChange={(e) =>
+                              updateRow(item._key, "unitOfMeasure", e.target.value)
+                            }
+                            className="h-8 text-sm text-right border-0 bg-transparent focus-visible:ring-1 focus-visible:ring-primary/40"
+                            list="um-options"
+                          />
+                          <datalist id="um-options">
+                            <option value="ml" />
+                            <option value="mq" />
+                            <option value="pz" />
+                            <option value="cad" />
+                            <option value="gg" />
+                            <option value="h" />
+                            <option value="kg" />
+                          </datalist>
+                        </td>
+                        <td className="px-2 py-1">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.unitPrice}
+                            onChange={(e) =>
+                              updateRow(item._key, "unitPrice", e.target.value)
+                            }
+                            className="h-8 text-sm text-right border-0 bg-transparent focus-visible:ring-1 focus-visible:ring-primary/40"
+                          />
+                        </td>
+                        <td className="px-3 py-1 text-right font-medium">
+                          € {fmtEuro(item.totalRow)}
+                        </td>
+                        <td className="px-2 py-1 text-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeRow(item._key)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addRow}
+                className="mt-1"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                Aggiungi riga
+              </Button>
+            </div>
+
+            {/* Riepilogo totali */}
+            <div className="flex justify-end">
+              <div className="space-y-1 text-sm min-w-[220px]">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Imponibile</span>
+                  <span>€ {fmtEuro(subtotale)}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>IVA 22%</span>
+                  <span>€ {fmtEuro(iva)}</span>
+                </div>
+                <div className="flex justify-between font-semibold border-t pt-1 mt-1">
+                  <span>Totale</span>
+                  <span>€ {fmtEuro(totale)}</span>
+                </div>
               </div>
             </div>
-            <Button variant="outline" className="w-full" onClick={() => { onOpenChange(false); window.location.href = `/quotes/${quote.id}`; }}>
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Apri preventivo {quote.number}
+
+            {/* Note */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Note
+              </label>
+              <Textarea
+                value={notes}
+                onChange={(e) => {
+                  setNotes(e.target.value);
+                  setIsDirty(true);
+                }}
+                placeholder="Note aggiuntive per la nota lavori..."
+                rows={2}
+                className="resize-none"
+              />
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="shrink-0 flex-col gap-2 sm:flex-row sm:gap-2 pt-2 border-t">
+          {/* Elimina (solo se WO esiste) */}
+          {wo && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="sm:mr-auto text-muted-foreground hover:text-destructive"
+              onClick={() => {
+                if (confirm("Eliminare la nota lavori? L'operazione non è reversibile.")) {
+                  deleteMutation.mutate(wo.id);
+                }
+              }}
+              disabled={isPending}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+              )}
+              Elimina
             </Button>
-          </div>
-        )}
+          )}
 
-        {!isLoading && quote && cfg && (
-          <div className="space-y-4 py-2">
-            {/* Badge stato */}
-            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cfg.cls}`}>
-              {cfg.label}
-            </span>
-
-            {/* Descrizione contestuale */}
-            <p className="text-sm text-muted-foreground leading-relaxed">{cfg.description}</p>
-
-            {/* Date */}
-            {quote.workOrderSentAt && (
-              <p className="text-xs text-muted-foreground">
-                📤 Inviata il {fmtDate(quote.workOrderSentAt)}
-              </p>
-            )}
-            {quote.workOrderConfirmedAt && (
-              <p className="text-xs text-muted-foreground">
-                ✅ Confermata il {fmtDate(quote.workOrderConfirmedAt)}
-              </p>
-            )}
-
-            {/* Totale */}
-            {quote.totalAmount && (
-              <div className="flex items-center justify-between rounded-md border px-3 py-2 bg-muted/30">
-                <span className="text-xs text-muted-foreground">Importo preventivo</span>
-                <span className="text-sm font-semibold">
-                  € {parseFloat(quote.totalAmount).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        <DialogFooter className="flex-col gap-2 sm:flex-row sm:gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="sm:mr-auto">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
             Chiudi
           </Button>
 
-          {/* ACCEPTED → Avvia NL */}
-          {status === "ACCEPTED" && (
-            <Button onClick={() => startMutation.mutate()} disabled={isPending} data-testid="button-nl-start">
-              {startMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ClipboardCheck className="w-4 h-4 mr-2" />}
-              Avvia Nota Lavori
-            </Button>
-          )}
-
-          {/* DRAFT → Apri editor (pagina intera, con tutto) */}
-          {status === "WORK_ORDER_DRAFT" && (
-            <Button onClick={openEditor} data-testid="button-nl-open-editor">
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Apri editor Nota Lavori
-            </Button>
-          )}
-
-          {/* SENT → Apri editor (sola lettura utile) + Conferma */}
-          {status === "WORK_ORDER_SENT" && (
+          {wo && (
             <>
-              <Button variant="outline" onClick={openEditor} data-testid="button-nl-view">
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Visualizza / PDF
+              <Button
+                variant="outline"
+                onClick={handleDownloadPdf}
+                disabled={pdfGenerating || !company}
+              >
+                {pdfGenerating ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4 mr-2" />
+                )}
+                Scarica PDF
               </Button>
-              <Button onClick={() => confirmMutation.mutate()} disabled={isPending} data-testid="button-nl-confirm">
-                {confirmMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                Conferma Nota Lavori
+
+              <Button
+                onClick={handleSave}
+                disabled={isPending || !isDirty}
+              >
+                {saveMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                Salva
               </Button>
             </>
-          )}
-
-          {/* CONFIRMED → solo visualizzazione */}
-          {status === "WORK_ORDER_CONFIRMED" && (
-            <Button variant="outline" onClick={openEditor} data-testid="button-nl-view-confirmed">
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Visualizza PDF
-            </Button>
           )}
         </DialogFooter>
       </DialogContent>
