@@ -202,8 +202,8 @@ function buildMockFatturePerCliente(leadId: string) {
   return base.slice(0, seed + 1);
 }
 
-/** Proiezione flusso di cassa mensile mock per i prossimi 6 mesi */
-function buildMockProiezione() {
+/** Proiezione flusso di cassa mensile mock per i prossimi N mesi */
+function buildMockProiezione(numMesi: number = 6) {
   const now = new Date();
   const scadenze = buildMockScadenze();
 
@@ -219,12 +219,12 @@ function buildMockProiezione() {
     else map[key].uscite += s.importo;
   }
 
-  // Genera i 6 mesi futuri (compreso il corrente) con dati simulati per quelli non coperti
-  const simulatedEntrate = [8200, 12400, 6800, 9500, 11200, 7600];
-  const simulatedUscite   = [4100,  5800, 3200, 4800,  6300, 3900];
+  // Dati simulati per fino a 12 mesi
+  const simulatedEntrate = [8200, 12400, 6800, 9500, 11200, 7600, 10300, 8900, 13100, 7200, 9800, 11500];
+  const simulatedUscite   = [4100,  5800, 3200, 4800,  6300, 3900,  5100, 4400,  6700, 3600, 5200,  5900];
 
   const months: { mese: string; entrate: number; uscite: number }[] = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < numMesi; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const label = d.toLocaleDateString("it-IT", { month: "short", year: "numeric" });
@@ -460,7 +460,8 @@ superbillRouter.get("/superbill/scadenze", isAuthenticated, async (req, res) => 
 
 /**
  * GET /api/superbill/proiezione
- * Restituisce la proiezione mensile del flusso di cassa per i prossimi 6 mesi.
+ * Restituisce la proiezione mensile del flusso di cassa per i prossimi N mesi.
+ * Query param: ?mesi=3|6|12 (default: 6)
  */
 superbillRouter.get("/superbill/proiezione", isAuthenticated, async (req, res) => {
   try {
@@ -468,8 +469,11 @@ superbillRouter.get("/superbill/proiezione", isAuthenticated, async (req, res) =
     const userCompany = await resolveUserCompany(userId, role, req);
     if (!userCompany) return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
 
+    const rawMesi = parseInt(req.query.mesi as string, 10);
+    const numMesi = [3, 6, 12].includes(rawMesi) ? rawMesi : 6;
+
     if (IS_MOCK) {
-      return res.json({ isMock: true, mesi: buildMockProiezione() });
+      return res.json({ isMock: true, mesi: buildMockProiezione(numMesi) });
     }
 
     // REAL MODE — aggrega le scadenze reali per mese (ATTIVA = entrate, PASSIVA = uscite)
@@ -505,7 +509,7 @@ superbillRouter.get("/superbill/proiezione", isAuthenticated, async (req, res) =
     }
 
     const mesi = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < numMesi; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const label = d.toLocaleDateString("it-IT", { month: "short", year: "numeric" });

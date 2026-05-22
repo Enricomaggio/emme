@@ -1596,8 +1596,11 @@ interface ProiezioneMese {
 }
 
 function ProiezioneFinanziaria() {
+  const [numMesi, setNumMesi] = useState<3 | 6 | 12>(6);
+
   const { data, isLoading } = useQuery<{ isMock: boolean; mesi: ProiezioneMese[] }>({
-    queryKey: ["/api/superbill/proiezione"],
+    queryKey: ["/api/superbill/proiezione", numMesi],
+    queryFn: () => fetch(`/api/superbill/proiezione?mesi=${numMesi}`, { credentials: "include" }).then((r) => r.json()),
   });
 
   const mesi = data?.mesi || [];
@@ -1644,7 +1647,7 @@ function ProiezioneFinanziaria() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 flex-wrap">
           <Banknote className="w-5 h-5 text-primary" />
           Proiezione Flusso di Cassa
           {isMock && (
@@ -1652,7 +1655,22 @@ function ProiezioneFinanziaria() {
               DEMO
             </span>
           )}
-          <span className="text-xs font-normal text-muted-foreground ml-1">prossimi 6 mesi</span>
+          <div className="ml-auto flex items-center gap-1 bg-muted rounded-full p-0.5">
+            {([3, 6, 12] as const).map((m) => (
+              <button
+                key={m}
+                data-testid={`proiezione-toggle-${m}`}
+                onClick={() => setNumMesi(m)}
+                className={`text-xs px-2.5 py-1 rounded-full transition-colors font-medium ${
+                  numMesi === m
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {m} mesi
+              </button>
+            ))}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
