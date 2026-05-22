@@ -20,15 +20,41 @@ export const discountFields = {
   ),
 };
 
+export const LATTONERIA_PRODUCTS = [
+  "Grondaia",
+  "Scossalina",
+  "Colmo",
+  "Canale di gronda",
+  "Tubo pluviale",
+  "Bavetta",
+  "Sguscio",
+  "Fascia paraghiaia",
+  "Converse",
+  "Scossalina a muro",
+  "Cappello da muro",
+  "Listello coprigiunto",
+  "Lamiera piana",
+  "Zoccolo",
+  "Davanzale",
+  "Fascia frontale",
+  "Bocchettone",
+  "Parascintille",
+];
+
 export const lattoneriaFormSchema = z.object({
+  productName: z.string().min(1, "Seleziona il tipo di prodotto"),
+  productNameCustom: z.string().optional(),
   materialId: z.string().min(1, "Seleziona un materiale"),
   materialThicknessId: z.string().min(1, "Seleziona uno spessore"),
   materialFinishId: z.string().optional(),
   developmentCm: z.string().refine((v) => parseFloat(v) > 0, { message: "Sviluppo > 0" }),
   quantity: z.string().refine((v) => parseFloat(v) > 0, { message: "Metri > 0" }),
-  description: z.string().optional(),
   marginPercent: z.string().optional(),
   ...discountFields,
+}).superRefine((data, ctx) => {
+  if (data.productName === "__CUSTOM__" && !data.productNameCustom?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Inserisci il nome del prodotto", path: ["productNameCustom"] });
+  }
 });
 
 export const articoloFormSchema = z.object({

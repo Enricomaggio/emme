@@ -444,9 +444,12 @@ export default function QuoteEditorPage() {
         | MaterialThicknessWithFinishes
         | undefined;
       const f = it.materialFinishId ? t?.finishes?.find((x) => x.id === it.materialFinishId) : undefined;
-      if (m && t) {
-        return `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}`;
-      }
+      const productLabel = it.description ? `${it.description} — ` : "";
+      const materialLabel = m && t
+        ? `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}`
+        : "";
+      const devLabel = it.developmentCm ? ` — sviluppo ${fmtQty(it.developmentCm)} cm × ${fmtQty(it.quantity)} ml` : "";
+      if (materialLabel) return `${productLabel}${materialLabel}${devLabel}`;
       return it.description || "Lattoneria";
     }
     if (it.type === "ARTICOLO") {
@@ -483,20 +486,33 @@ export default function QuoteEditorPage() {
       items: q.items
         .slice()
         .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-        .map((it) => ({
-          id: it.id,
-          type: it.type,
-          description: it.description,
-          unitOfMeasure: it.unitOfMeasure,
-          developmentCm: it.developmentCm,
-          quantity: it.quantity,
-          unitPriceApplied: it.unitPriceApplied,
-          totalRow: it.totalRow,
-          displayOrder: it.displayOrder,
-          discountPercent: it.discountPercent ?? null,
-          overrideTotal: it.overrideTotal ?? null,
-          baseTotal: it.baseTotal ?? null,
-        })),
+        .map((it) => {
+          let resolvedName: string | undefined;
+          if (it.type === "LATTONERIA") {
+            const m = materialsQuery.data?.find((x) => x.id === it.materialId);
+            const t = m?.thicknesses?.find((x) => x.id === it.materialThicknessId) as MaterialThicknessWithFinishes | undefined;
+            const f = it.materialFinishId ? t?.finishes?.find((x) => x.id === it.materialFinishId) : undefined;
+            if (m && t) {
+              const productPrefix = it.description ? `${it.description} — ` : "";
+              resolvedName = `${productPrefix}${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}`;
+            }
+          }
+          return {
+            id: it.id,
+            type: it.type,
+            description: it.description,
+            unitOfMeasure: it.unitOfMeasure,
+            developmentCm: it.developmentCm,
+            quantity: it.quantity,
+            unitPriceApplied: it.unitPriceApplied,
+            totalRow: it.totalRow,
+            displayOrder: it.displayOrder,
+            discountPercent: it.discountPercent ?? null,
+            overrideTotal: it.overrideTotal ?? null,
+            baseTotal: it.baseTotal ?? null,
+            resolvedName,
+          };
+        }),
     };
   }
 
@@ -511,12 +527,9 @@ export default function QuoteEditorPage() {
       const m = materialsQuery.data?.find((x) => x.id === it.materialId);
       const t = m?.thicknesses?.find((x) => x.id === it.materialThicknessId) as MaterialThicknessWithFinishes | undefined;
       const f = it.materialFinishId ? t?.finishes?.find((x) => x.id === it.materialFinishId) : undefined;
-      const computedName = m && t ? `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}` : null;
-      const desc = computedName || it.description || "Lattoneria";
-      const costSuffix = it.unitCostPerKg
-        ? ` — ${formatEur(parseFloat(it.unitCostPerKg))} €/kg`
-        : "";
-      return `${desc} — sviluppo ${it.developmentCm ? fmtQty(it.developmentCm) : "?"} cm × ${fmtQty(it.quantity)} ml${costSuffix}`;
+      const productLabel = it.description ? `${it.description} — ` : "";
+      const materialLabel = m && t ? `${m.name} ${parseFloat(t.thicknessMm)}mm${f ? ` — ${f.name}` : ""}` : (it.description || "Lattoneria");
+      return `${productLabel}${materialLabel} — sviluppo ${it.developmentCm ? fmtQty(it.developmentCm) : "?"} cm × ${fmtQty(it.quantity)} ml`;
     }
     if (it.type === "ARTICOLO") {
       let variantName: string | undefined;
