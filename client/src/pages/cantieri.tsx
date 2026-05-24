@@ -278,8 +278,16 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
 
     if (lastWo && lastWo.status === "DRAFT") {
       return (
-        <Button size="sm" variant="outline" onClick={() => window.location.href = `/quotes/${lastWo.quoteId || ""}`}>
+        <Button size="sm" variant="outline" onClick={() => { window.location.href = `/work-orders/${lastWo.id}`; }}>
           Apri NL
+        </Button>
+      );
+    }
+
+    if (lastWo && lastWo.status === "SENT") {
+      return (
+        <Button size="sm" variant="outline" onClick={() => { window.location.href = `/work-orders/${lastWo.id}`; }}>
+          Vedi NL
         </Button>
       );
     }

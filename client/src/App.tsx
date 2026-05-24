@@ -69,6 +69,7 @@ import MappaPage from "@/pages/mappa";
 import ResetPasswordPage from "@/pages/reset-password";
 import CantieriPage from "@/pages/cantieri";
 import CreateWorkOrderPage from "@/pages/create-work-order";
+import WorkOrderDetailPage from "@/pages/work-order-detail";
 import NotFound from "@/pages/not-found";
 
 function LoadingScreen() {
@@ -209,6 +210,9 @@ function AppRouter() {
       </Route>
       <Route path="/cantieri/:opportunityId/nuova-nl">
         <ProtectedRoute component={CreateWorkOrderPage} />
+      </Route>
+      <Route path="/work-orders/:id">
+        <ProtectedRoute component={WorkOrderDetailPage} />
       </Route>
       <Route path="/cantieri">
         {APP_CONFIG.moduleCantieri

@@ -33,6 +33,22 @@ workOrdersRouter.get("/work-orders", isAuthenticated, async (req: any, res) => {
   }
 });
 
+// GET /api/work-orders/:id
+// Restituisce una singola nota lavori con le sue righe.
+workOrdersRouter.get("/work-orders/:id", isAuthenticated, async (req: any, res) => {
+  try {
+    const userCtx = await resolveUserCompany(req.user.id, req.user.role, req);
+    if (!userCtx) return res.status(403).json({ error: "No company access" });
+
+    const wo = await storage.getWorkOrder(req.params.id, userCtx.companyId);
+    if (!wo) return res.status(404).json({ error: "Nota lavori non trovata" });
+    res.json(wo);
+  } catch (e) {
+    console.error("[work-orders] GET /:id error:", e);
+    res.status(500).json({ error: "Errore interno" });
+  }
+});
+
 // POST /api/work-orders
 // Crea una nuova nota lavori (da preventivo o vuota).
 workOrdersRouter.post("/work-orders", isAuthenticated, async (req: any, res) => {
