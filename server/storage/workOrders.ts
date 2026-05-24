@@ -94,15 +94,24 @@ export const workOrdersStorage = {
 
     let insertedItems: WorkOrderItem[] = [];
     if (sourceItems.length > 0) {
-      const woItemPayloads = sourceItems.map((item, i) => ({
-        workOrderId: wo.id,
-        description: item.description ?? "",
-        unitOfMeasure: item.unitOfMeasure ?? "ml",
-        quantity: item.quantity ?? "0",
-        unitPrice: item.unitPriceApplied ?? "0",
-        totalRow: item.totalRow ?? "0",
-        displayOrder: i,
-      }));
+      const woItemPayloads = sourceItems.map((item, i) => {
+        const qty = parseFloat(item.quantity ?? "0");
+        // Usa clientTotal (colonna destra) se disponibile, altrimenti totalRow
+        const clientRowTotal = item.clientTotal ?? item.totalRow ?? "0";
+        // Prezzo unitario lato cliente
+        const clientUnitPrice = (item.clientTotal && qty > 0)
+          ? (parseFloat(item.clientTotal) / qty).toFixed(4)
+          : (item.unitPriceApplied ?? "0");
+        return {
+          workOrderId: wo.id,
+          description: item.description ?? "",
+          unitOfMeasure: item.unitOfMeasure ?? "ml",
+          quantity: item.quantity ?? "0",
+          unitPrice: clientUnitPrice,
+          totalRow: clientRowTotal,
+          displayOrder: i,
+        };
+      });
       insertedItems = await db
         .insert(workOrderItems)
         .values(woItemPayloads)
@@ -364,7 +373,9 @@ export const workOrdersStorage = {
 
     const rows = items.map(item => {
       const qtyPrev = parseFloat(item.quantity ?? "0");
-      const totalPrev = parseFloat(item.totalRow ?? "0");
+      // Usa clientTotal (colonna destra = manodopera spalmata sul cliente)
+      // se disponibile, altrimenti fallback su totalRow (colonna sinistra interna)
+      const totalPrev = parseFloat(item.clientTotal ?? item.totalRow ?? "0");
       const inv = invoicedByItem.get(item.id) ?? { qty: 0, total: 0 };
       const qtyFatt = inv.qty;
       const totalFatt = inv.total;
@@ -374,13 +385,20 @@ export const workOrdersStorage = {
       totalPreventivo += totalPrev;
       totalFatturato += totalFatt;
 
+      // Prezzo unitario effettivo lato cliente:
+      // se clientTotal è disponibile si ricava dividendo per la quantità,
+      // altrimenti si usa unitPriceApplied (prezzo base senza spalma)
+      const clientUnitPrice = (item.clientTotal && qtyPrev > 0)
+        ? (parseFloat(item.clientTotal) / qtyPrev).toFixed(4)
+        : (item.unitPriceApplied ?? "0");
+
       return {
         quoteItemId: item.id,
         type: item.type ?? "MANUALE",
         description: item.description ?? "",
         unitOfMeasure: item.unitOfMeasure ?? "",
-        unitPrice: item.unitPriceApplied ?? "0",
-        quantityPreventivo: parseFloat(item.quantity ?? "0").toString(),
+        unitPrice: clientUnitPrice,
+        quantityPreventivo: qtyPrev.toString(),
         totalPreventivo: totalPrev.toFixed(2),
         quantityFatturata: parseFloat(qtyFatt.toFixed(4)).toString(),
         totalFatturato: totalFatt.toFixed(2),
