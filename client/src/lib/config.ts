@@ -10,4 +10,5 @@ export const APP_CONFIG = {
   moduleExternalEngineers: import.meta.env.VITE_MODULE_EXTERNAL_ENGINEERS === "true",
   moduleClausole: import.meta.env.VITE_MODULE_CLAUSOLE === "true",
   quoteEditorType: (import.meta.env.VITE_QUOTE_EDITOR_TYPE as string) || "scaffolding",
+  moduleCantieri: import.meta.env.VITE_MODULE_CANTIERI !== "false",
 };

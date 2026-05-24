@@ -496,6 +496,10 @@ export const opportunities = pgTable("opportunities", {
   wonAt: timestamp("won_at"),
   lostAt: timestamp("lost_at"),
 
+  // Stato operativo cantiere (rilevante solo quando wonAt IS NOT NULL)
+  // "ACTIVE" | "INVOICING_PENDING" | "COMPLETED"
+  siteStatus: text("site_status").notNull().default("ACTIVE"),
+
   // Campi per gestione notifica "Preventivo Inviato da 60 giorni"
   quoteSentAt: timestamp("quote_sent_at"),
   quoteReminderSnoozedUntil: timestamp("quote_reminder_snoozed_until"),
@@ -1755,6 +1759,8 @@ export const workOrders = pgTable("work_orders", {
   status: text("status").$type<WorkOrderStatus>().notNull().default("DRAFT"),
   sentAt: timestamp("sent_at"),
   confirmedAt: timestamp("confirmed_at"),
+  invoicedAmount: numeric("invoiced_amount", { precision: 10, scale: 2 }),
+  invoicedAt: timestamp("invoiced_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -1771,6 +1777,8 @@ export const workOrderItems = pgTable("work_order_items", {
   unitPrice: numeric("unit_price").notNull().default("0"),
   totalRow: numeric("total_row").notNull().default("0"),
   displayOrder: integer("display_order").notNull().default(0),
+  // Collegamento alla riga preventivo di origine (popolato dal wizard Crea NL, Prompt 2)
+  sourceQuoteItemId: varchar("source_quote_item_id").references(() => quoteItems.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("work_order_items_work_order_id_idx").on(table.workOrderId),

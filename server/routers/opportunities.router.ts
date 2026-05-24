@@ -161,6 +161,22 @@ opportunitiesRouter.get("/opportunities", isAuthenticated, async (req, res) => {
       ...o,
       referentName: o.referentId ? referentMap.get(o.referentId) || null : null,
     }));
+
+    // Filtro opportunità vinte con enrichment leadName + quoteTotal
+    if (req.query.won === "true") {
+      const wonOpps = enriched.filter(o => o.wonAt !== null);
+      const enrichedWon = await Promise.all(wonOpps.map(async o => {
+        const lead = await storage.getLead(o.leadId, o.companyId);
+        const leadName = lead
+          ? (lead.entityType === "COMPANY" ? lead.name || "" : `${lead.firstName || ""} ${lead.lastName || ""}`.trim())
+          : null;
+        const oppQuotes = await storage.getQuotesByOpportunity(o.id, o.companyId);
+        const quoteTotal = oppQuotes.reduce((sum, q) => sum + parseFloat(q.totalAmount || "0"), 0);
+        return { ...o, leadName, quoteTotal: quoteTotal.toFixed(2) };
+      }));
+      return res.json(enrichedWon);
+    }
+
     res.json(enriched);
   } catch (error) {
     console.error("Error fetching opportunities:", error);
@@ -359,6 +375,7 @@ opportunitiesRouter.patch("/opportunities/:id", isAuthenticated, async (req, res
       if (patchStage.name === "Vinto") {
         dataWithTimestamps.wonAt = new Date();
         dataWithTimestamps.lostAt = null;
+        (dataWithTimestamps as any).siteStatus = "ACTIVE";
       } else if (patchStage.name === "Perso") {
         dataWithTimestamps.lostAt = new Date();
         dataWithTimestamps.wonAt = null;
@@ -538,6 +555,15 @@ opportunitiesRouter.put("/opportunities/:id/move", isAuthenticated, async (req, 
         }
       } catch (projErr) {
         console.error("Error deleting project on Vinto exit:", projErr);
+      }
+    }
+
+    // Imposta siteStatus = "ACTIVE" quando opportunità passa a "Vinto"
+    if (newStage && newStage.name === "Vinto") {
+      try {
+        await storage.updateOpportunity(opportunity.id, userCompany.companyId, { siteStatus: "ACTIVE" } as any);
+      } catch (siteErr) {
+        console.error("Error setting siteStatus=ACTIVE on Vinto:", siteErr);
       }
     }
 
@@ -1018,6 +1044,40 @@ opportunitiesRouter.get("/opportunities/:id/site-details", isAuthenticated, asyn
   } catch (error) {
     console.error("Error fetching opportunity site details:", error);
     res.status(500).json({ message: "Errore nel recupero dei dettagli cantiere" });
+  }
+});
+
+// POST /api/opportunities/:id/complete-site - Chiude il cantiere (siteStatus = "COMPLETED")
+opportunitiesRouter.post("/opportunities/:id/complete-site", isAuthenticated, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user!;
+
+    if (!canAccessLeads(role)) {
+      return res.status(403).json({ message: "Accesso negato" });
+    }
+
+    const userCompany = await resolveUserCompany(userId, role, req);
+    if (!userCompany) {
+      return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
+    }
+
+    const opp = await storage.getOpportunity(req.params.id, userCompany.companyId);
+    if (!opp) {
+      return res.status(404).json({ message: "Opportunità non trovata" });
+    }
+
+    if (!opp.wonAt) {
+      return res.status(400).json({ message: "L'opportunità non è vinta" });
+    }
+
+    const updated = await storage.updateOpportunity(req.params.id, userCompany.companyId, {
+      siteStatus: "COMPLETED",
+    } as any);
+
+    res.json(updated);
+  } catch (error) {
+    console.error("Error completing site:", error);
+    res.status(500).json({ message: "Errore nella chiusura del cantiere" });
   }
 });
 

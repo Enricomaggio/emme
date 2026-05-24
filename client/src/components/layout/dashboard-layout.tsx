@@ -1,12 +1,12 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { 
-  LayoutDashboard, 
+import {
+  LayoutDashboard,
   Users,
-  Target, 
-  Settings, 
-  Menu, 
+  Target,
+  Settings,
+  Menu,
   X,
   LogOut,
   Building2,
@@ -17,7 +17,8 @@ import {
   Map,
   ChevronLeft,
   ChevronRight,
-  ClipboardList
+  ClipboardList,
+  HardHat
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -71,6 +72,7 @@ const allNavigationItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leads", label: "Contatti", icon: Users, requiresLeadAccess: true },
   { href: "/opportunita", label: "Opportunità", icon: Target, requiresLeadAccess: true },
+  ...(APP_CONFIG.moduleCantieri ? [{ href: "/cantieri", label: "Cantieri", icon: HardHat }] : []),
   ...(APP_CONFIG.moduleProgetti ? [{ href: "/progetti", label: "Progetti", icon: FolderKanban, allowedRoles: ["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"] as UserRole[] }] : []),
   ...(APP_CONFIG.moduleProxit ? [{ href: "/proxit", label: "Proxit", icon: CalendarDays, allowedRoles: ["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"] as UserRole[] }] : []),
   ...(APP_CONFIG.moduleSAL ? [{ href: "/sal", label: "SAL", icon: ClipboardList, allowedRoles: ["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"] as UserRole[] }] : []),

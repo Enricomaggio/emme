@@ -71,6 +71,7 @@ import ProxitPage from "@/pages/proxit";
 import MappaPage from "@/pages/mappa";
 import SalPage from "@/pages/sal";
 import ResetPasswordPage from "@/pages/reset-password";
+import CantieriPage from "@/pages/cantieri";
 import NotFound from "@/pages/not-found";
 
 function LoadingScreen() {
@@ -225,6 +226,11 @@ function AppRouter() {
       <Route path="/sal">
         {APP_CONFIG.moduleSAL
           ? <RoleProtectedRoute component={SalPage} allowedRoles={["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"]} />
+          : <Redirect to="/dashboard" />}
+      </Route>
+      <Route path="/cantieri">
+        {APP_CONFIG.moduleCantieri
+          ? <ProtectedRoute component={CantieriPage} />
           : <Redirect to="/dashboard" />}
       </Route>
       <Route path="/mappa">

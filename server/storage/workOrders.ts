@@ -200,4 +200,59 @@ export const workOrdersStorage = {
       .where(and(eq(workOrders.id, id), eq(workOrders.companyId, companyId)));
     return (result.rowCount ?? 0) > 0;
   },
+
+  async getWorkOrdersByOpportunity(
+    opportunityId: string,
+    companyId: string
+  ): Promise<WorkOrderWithItems[]> {
+    const woList = await db
+      .select()
+      .from(workOrders)
+      .where(and(eq(workOrders.opportunityId, opportunityId), eq(workOrders.companyId, companyId)))
+      .orderBy(workOrders.createdAt);
+    if (woList.length === 0) return [];
+    const results: WorkOrderWithItems[] = [];
+    for (const wo of woList) {
+      const items = await db
+        .select()
+        .from(workOrderItems)
+        .where(eq(workOrderItems.workOrderId, wo.id))
+        .orderBy(workOrderItems.displayOrder);
+      results.push({ ...wo, items });
+    }
+    return results;
+  },
+
+  async getAllWorkOrdersByCompany(companyId: string): Promise<WorkOrderWithItems[]> {
+    const woList = await db
+      .select()
+      .from(workOrders)
+      .where(eq(workOrders.companyId, companyId))
+      .orderBy(workOrders.createdAt);
+    if (woList.length === 0) return [];
+    const results: WorkOrderWithItems[] = [];
+    for (const wo of woList) {
+      const items = await db
+        .select()
+        .from(workOrderItems)
+        .where(eq(workOrderItems.workOrderId, wo.id))
+        .orderBy(workOrderItems.displayOrder);
+      results.push({ ...wo, items });
+    }
+    return results;
+  },
+
+  async registerInvoice(
+    id: string,
+    companyId: string,
+    invoicedAmount: string,
+    invoicedAt: Date
+  ): Promise<WorkOrder | null> {
+    const [wo] = await db
+      .update(workOrders)
+      .set({ invoicedAmount, invoicedAt, updatedAt: new Date() })
+      .where(and(eq(workOrders.id, id), eq(workOrders.companyId, companyId)))
+      .returning();
+    return wo ?? null;
+  },
 };

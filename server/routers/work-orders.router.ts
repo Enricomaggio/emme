@@ -6,20 +6,27 @@ import { resolveUserCompany } from "../utils/accessContext";
 
 export const workOrdersRouter = Router();
 
-// GET /api/work-orders?opportunityId=...
-// Restituisce la nota lavori (con le righe) per un'opportunità, o null se non esiste.
+// GET /api/work-orders?opportunityId=... | ?companyScope=all
+// Con opportunityId: restituisce array di WO per quell'opportunità.
+// Con companyScope=all: restituisce tutte le WO della company.
 workOrdersRouter.get("/work-orders", isAuthenticated, async (req: any, res) => {
   try {
     const userCtx = await resolveUserCompany(req.user.id, req.user.role, req);
     if (!userCtx) return res.status(403).json({ error: "No company access" });
 
-    const { opportunityId } = req.query;
+    const { opportunityId, companyScope } = req.query;
+
+    if (companyScope === "all") {
+      const wos = await storage.getAllWorkOrdersByCompany(userCtx.companyId);
+      return res.json(wos);
+    }
+
     if (!opportunityId || typeof opportunityId !== "string") {
       return res.status(400).json({ error: "opportunityId obbligatorio" });
     }
 
-    const wo = await storage.getWorkOrderByOpportunity(opportunityId, userCtx.companyId);
-    res.json(wo); // null se non esiste
+    const wos = await storage.getWorkOrdersByOpportunity(opportunityId, userCtx.companyId);
+    res.json(wos);
   } catch (e) {
     console.error("[work-orders] GET error:", e);
     res.status(500).json({ error: "Errore interno" });
@@ -117,6 +124,96 @@ workOrdersRouter.delete("/work-orders/:id", isAuthenticated, async (req: any, re
     res.status(204).end();
   } catch (e) {
     console.error("[work-orders] DELETE error:", e);
+    res.status(500).json({ error: "Errore interno" });
+  }
+});
+
+// POST /api/work-orders/:id/send
+// Imposta status = "SENT", sentAt = now()
+workOrdersRouter.post("/work-orders/:id/send", isAuthenticated, async (req: any, res) => {
+  try {
+    const userCtx = await resolveUserCompany(req.user.id, req.user.role, req);
+    if (!userCtx) return res.status(403).json({ error: "No company access" });
+
+    const wo = await storage.updateWorkOrder(
+      req.params.id,
+      userCtx.companyId,
+      { status: "SENT", sentAt: new Date() }
+    );
+
+    if (!wo) return res.status(404).json({ error: "Nota lavori non trovata" });
+    res.json(wo);
+  } catch (e) {
+    console.error("[work-orders] POST /send error:", e);
+    res.status(500).json({ error: "Errore interno" });
+  }
+});
+
+// POST /api/work-orders/:id/confirm
+// Imposta status = "CONFIRMED", confirmedAt = now()
+// Imposta siteStatus = "INVOICING_PENDING" sull'opportunity collegata
+workOrdersRouter.post("/work-orders/:id/confirm", isAuthenticated, async (req: any, res) => {
+  try {
+    const userCtx = await resolveUserCompany(req.user.id, req.user.role, req);
+    if (!userCtx) return res.status(403).json({ error: "No company access" });
+
+    const existingWo = await storage.getWorkOrder(req.params.id, userCtx.companyId);
+    if (!existingWo) return res.status(404).json({ error: "Nota lavori non trovata" });
+
+    const wo = await storage.updateWorkOrder(
+      req.params.id,
+      userCtx.companyId,
+      { status: "CONFIRMED", confirmedAt: new Date() }
+    );
+
+    const opportunity = await storage.updateOpportunity(
+      existingWo.opportunityId,
+      userCtx.companyId,
+      { siteStatus: "INVOICING_PENDING" } as any
+    );
+
+    res.json({ workOrder: wo, opportunity: opportunity ?? null });
+  } catch (e) {
+    console.error("[work-orders] POST /confirm error:", e);
+    res.status(500).json({ error: "Errore interno" });
+  }
+});
+
+// POST /api/work-orders/:id/invoice
+// body: { invoicedAmount: string }
+// Salva invoicedAmount, invoicedAt = now()
+// Imposta siteStatus = "ACTIVE" sull'opportunity (logica SAL completa al Prompt 2)
+workOrdersRouter.post("/work-orders/:id/invoice", isAuthenticated, async (req: any, res) => {
+  try {
+    const userCtx = await resolveUserCompany(req.user.id, req.user.role, req);
+    if (!userCtx) return res.status(403).json({ error: "No company access" });
+
+    const { invoicedAmount } = z
+      .object({ invoicedAmount: z.string().min(1) })
+      .parse(req.body);
+
+    const existingWo = await storage.getWorkOrder(req.params.id, userCtx.companyId);
+    if (!existingWo) return res.status(404).json({ error: "Nota lavori non trovata" });
+
+    const wo = await storage.registerInvoice(
+      req.params.id,
+      userCtx.companyId,
+      invoicedAmount,
+      new Date()
+    );
+
+    const opportunity = await storage.updateOpportunity(
+      existingWo.opportunityId,
+      userCtx.companyId,
+      { siteStatus: "ACTIVE" } as any
+    );
+
+    res.json({ workOrder: wo, opportunity: opportunity ?? null });
+  } catch (e) {
+    console.error("[work-orders] POST /invoice error:", e);
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: "Dati non validi", details: e.errors });
+    }
     res.status(500).json({ error: "Errore interno" });
   }
 });
