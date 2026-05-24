@@ -11,12 +11,116 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { WorkOrderWithItems } from "@shared/schema";
 
 type SiteStatus = "ACTIVE" | "INVOICING_PENDING" | "COMPLETED";
+
+interface SalRowData {
+  quoteItemId: string;
+  type: string;
+  description: string;
+  unitOfMeasure: string;
+  quantityPreventivo: string;
+  totalPreventivo: string;
+  quantityFatturata: string;
+  totalFatturato: string;
+  quantityResiduo: string;
+  totalResiduo: string;
+}
+
+interface SalData {
+  opportunityId: string;
+  quoteId: string | null;
+  rows: SalRowData[];
+  totals: {
+    totalPreventivo: string;
+    totalFatturato: string;
+    totalResiduo: string;
+    percentualeFatturata: string;
+  };
+}
+
+function SalPanel({ sal }: { sal: SalData }) {
+  const pct = Math.min(100, Math.max(0, parseFloat(sal.totals.percentualeFatturata)));
+
+  return (
+    <div className="space-y-3 py-1">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b text-muted-foreground uppercase tracking-wide">
+            <th className="py-1 text-left font-medium">Voce</th>
+            <th className="py-1 text-left font-medium">UdM</th>
+            <th className="py-1 text-right font-medium">Preventivato</th>
+            <th className="py-1 text-right font-medium">Fatturato</th>
+            <th className="py-1 text-right font-medium">Residuo</th>
+            <th className="py-1 text-right font-medium">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sal.rows.map(row => {
+            const rowPct =
+              parseFloat(row.totalPreventivo) > 0
+                ? ((parseFloat(row.totalFatturato) / parseFloat(row.totalPreventivo)) * 100).toFixed(1)
+                : "0";
+            const qtyPrev = parseFloat(row.quantityPreventivo);
+            const qtyFatt = parseFloat(row.quantityFatturata);
+            return (
+              <tr key={row.quoteItemId} className="border-b last:border-0">
+                <td className="py-1">{row.description || "—"}</td>
+                <td className="py-1 text-muted-foreground">{row.unitOfMeasure || "—"}</td>
+                <td className="py-1 text-right">
+                  {qtyPrev > 0 && <span className="text-muted-foreground mr-1">{qtyPrev}</span>}
+                  {formatEuro(row.totalPreventivo)}
+                </td>
+                <td className="py-1 text-right">
+                  {parseFloat(row.totalFatturato) > 0 ? (
+                    <>
+                      {qtyFatt > 0 && <span className="text-muted-foreground mr-1">{qtyFatt}</span>}
+                      {formatEuro(row.totalFatturato)}
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="py-1 text-right">
+                  {parseFloat(row.totalResiduo) > 0 ? (
+                    <>
+                      {parseFloat(row.quantityResiduo) > 0 && (
+                        <span className="text-muted-foreground mr-1">{parseFloat(row.quantityResiduo)}</span>
+                      )}
+                      {formatEuro(row.totalResiduo)}
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="py-1 text-right">{rowPct}%</td>
+              </tr>
+            );
+          })}
+          <tr className="border-t font-semibold text-xs">
+            <td className="py-1" colSpan={2}>TOTALE</td>
+            <td className="py-1 text-right">{formatEuro(sal.totals.totalPreventivo)}</td>
+            <td className="py-1 text-right">
+              {parseFloat(sal.totals.totalFatturato) > 0 ? formatEuro(sal.totals.totalFatturato) : "—"}
+            </td>
+            <td className="py-1 text-right">{formatEuro(sal.totals.totalResiduo)}</td>
+            <td className="py-1 text-right">{sal.totals.percentualeFatturata}%</td>
+          </tr>
+        </tbody>
+      </table>
+      <div className="h-2 bg-gray-200 rounded overflow-hidden">
+        <div
+          className="h-2 bg-blue-500 rounded transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 interface WonOpportunity {
   id: string;
@@ -123,6 +227,19 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const [salExpanded, setSalExpanded] = useState(false);
+  const [salLoaded, setSalLoaded] = useState(false);
+
+  const { data: salData, isLoading: salLoading } = useQuery<SalData>({
+    queryKey: ["/api/opportunities", opp.id, "sal"],
+    enabled: salLoaded,
+  });
+
+  function toggleSal() {
+    if (!salLoaded) setSalLoaded(true);
+    setSalExpanded(prev => !prev);
+  }
+
   const fatturato = wos.reduce((sum, wo) => {
     if (wo.invoicedAt && wo.invoicedAmount) {
       return sum + parseFloat(wo.invoicedAmount);
@@ -149,7 +266,11 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
   function renderAction() {
     if (wos.length === 0) {
       return (
-        <Button size="sm" variant="outline" disabled title="Disponibile presto">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => { window.location.href = `/cantieri/${opp.id}/nuova-nl`; }}
+        >
           Crea Nota Lavori
         </Button>
       );
@@ -176,7 +297,11 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
 
     if (opp.siteStatus === "ACTIVE" && wos.some((wo) => wo.invoicedAt)) {
       return (
-        <Button size="sm" variant="outline" disabled title="Disponibile presto">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => { window.location.href = `/cantieri/${opp.id}/nuova-nl`; }}
+        >
           Nuova NL
         </Button>
       );
@@ -199,27 +324,60 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
   }
 
   return (
-    <tr className="border-b last:border-0 hover:bg-muted/30">
-      <td className="px-4 py-3 font-medium">{opp.leadName || "—"}</td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{opp.title}</td>
-      <td className="px-4 py-3 text-right text-sm">
-        {quoteTotal > 0 ? formatEuro(quoteTotal) : "—"}
-      </td>
-      <td className="px-4 py-3 text-right text-sm">
-        {fatturato > 0 ? formatEuro(fatturato) : "—"}
-      </td>
-      <td className="px-4 py-3 text-right text-sm">
-        {quoteTotal > 0 ? formatEuro(residuo) : "—"}
-      </td>
-      <td className="px-4 py-3">
-        {lastWo ? (
-          <Badge variant={woStatusVariant(lastWo.status)}>{woStatusLabel(lastWo.status)}</Badge>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </td>
-      <td className="px-4 py-3">{renderAction()}</td>
-    </tr>
+    <>
+      <tr className="border-b last:border-0 hover:bg-muted/30">
+        <td className="px-2 py-3 w-8">
+          <button
+            onClick={toggleSal}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            title="Mostra SAL"
+          >
+            {salExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+        </td>
+        <td className="px-4 py-3 font-medium">{opp.leadName || "—"}</td>
+        <td className="px-4 py-3 text-sm text-muted-foreground">{opp.title}</td>
+        <td className="px-4 py-3 text-right text-sm">
+          {quoteTotal > 0 ? formatEuro(quoteTotal) : "—"}
+        </td>
+        <td className="px-4 py-3 text-right text-sm">
+          {fatturato > 0 ? formatEuro(fatturato) : "—"}
+        </td>
+        <td className="px-4 py-3 text-right text-sm">
+          {quoteTotal > 0 ? formatEuro(residuo) : "—"}
+        </td>
+        <td className="px-4 py-3">
+          {lastWo ? (
+            <Badge variant={woStatusVariant(lastWo.status)}>{woStatusLabel(lastWo.status)}</Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3">{renderAction()}</td>
+      </tr>
+      {salExpanded && (
+        <tr className="bg-muted/10">
+          <td colSpan={8} className="px-6 py-3 border-b">
+            {salLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Caricamento SAL...</span>
+              </div>
+            ) : salData && salData.rows.length > 0 ? (
+              <SalPanel sal={salData} />
+            ) : (
+              <p className="text-sm text-muted-foreground py-2">
+                Nessun preventivo collegato o nessuna riga disponibile.
+              </p>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -238,6 +396,7 @@ function SectionTable({ opportunities, wosByOppId, onInvoice }: SectionTableProp
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-xs text-muted-foreground uppercase tracking-wide">
+            <th className="px-2 py-2 w-8"></th>
             <th className="px-4 py-2 text-left font-medium">Cliente</th>
             <th className="px-4 py-2 text-left font-medium">Cantiere</th>
             <th className="px-4 py-2 text-right font-medium">Tot. preventivo</th>

@@ -179,6 +179,63 @@ workOrdersRouter.post("/work-orders/:id/confirm", isAuthenticated, async (req: a
   }
 });
 
+// GET /api/opportunities/:id/sal
+// Restituisce il SAL per riga di preventivo dell'opportunity.
+workOrdersRouter.get("/opportunities/:id/sal", isAuthenticated, async (req: any, res) => {
+  try {
+    const userCtx = await resolveUserCompany(req.user.id, req.user.role, req);
+    if (!userCtx) return res.status(403).json({ error: "No company access" });
+
+    const sal = await storage.getSal(req.params.id, userCtx.companyId);
+    res.json(sal);
+  } catch (e) {
+    console.error("[work-orders] GET /sal error:", e);
+    res.status(500).json({ error: "Errore interno" });
+  }
+});
+
+// POST /api/opportunities/:id/work-orders/from-quote
+// Crea una NL con selezione parziale delle righe di un preventivo.
+workOrdersRouter.post("/opportunities/:id/work-orders/from-quote", isAuthenticated, async (req: any, res) => {
+  try {
+    const userCtx = await resolveUserCompany(req.user.id, req.user.role, req);
+    if (!userCtx) return res.status(403).json({ error: "No company access" });
+
+    const itemSchema = z.object({
+      sourceQuoteItemId: z.string().min(1),
+      description: z.string().default(""),
+      unitOfMeasure: z.string().default(""),
+      quantity: z.string().default("0"),
+      unitPrice: z.string().default("0"),
+      totalRow: z.string().default("0"),
+    });
+
+    const body = z
+      .object({
+        quoteId: z.string().min(1),
+        items: z.array(itemSchema).min(1),
+      })
+      .parse(req.body);
+
+    const wo = await storage.createWorkOrderFromSelection(
+      userCtx.companyId,
+      req.params.id,
+      body.quoteId,
+      body.items
+    );
+
+    await storage.updateOpportunity(req.params.id, userCtx.companyId, { siteStatus: "ACTIVE" } as any);
+
+    res.status(201).json(wo);
+  } catch (e) {
+    console.error("[work-orders] POST /from-quote error:", e);
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: "Dati non validi", details: e.errors });
+    }
+    res.status(500).json({ error: "Errore interno" });
+  }
+});
+
 // POST /api/work-orders/:id/invoice
 // body: { invoicedAmount: string }
 // Salva invoicedAmount, invoicedAt = now()
