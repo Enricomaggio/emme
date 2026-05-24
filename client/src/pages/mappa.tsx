@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Filter, Truck, Eye, RotateCcw, Loader2, Navigation2 } from "lucide-react";
+import { MapPin, Filter, Eye, RotateCcw, Loader2, Navigation2 } from "lucide-react";
 import { useAuth, usePermission } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -27,7 +27,6 @@ interface MapOpportunity {
   leadId: string;
   assignedToUserId: string | null;
   value: string | null;
-  ritiroEsubero: boolean | null;
   sopralluogoFatto: boolean | null;
   mapsLink: string | null;
   estimatedStartDate: string | null;
@@ -150,7 +149,6 @@ export default function MappaPage() {
   const highlightId = useMemo(() => new URLSearchParams(searchString).get("highlight"), [searchString]);
   const [selectedStage, setSelectedStage] = useState<string>("all");
   const [selectedUser, setSelectedUser] = useState<string>("all");
-  const [showRitiroOnly, setShowRitiroOnly] = useState(false);
   const [showSopralluogoOnly, setShowSopralluogoOnly] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
   const markerRefs = useRef<Map<string, L.Marker>>(new Map());
@@ -215,11 +213,10 @@ export default function MappaPage() {
     return opportunities.filter((opp) => {
       if (selectedStage !== "all" && opp.stageId !== selectedStage) return false;
       if (selectedUser !== "all" && opp.assignedToUserId !== selectedUser) return false;
-      if (showRitiroOnly && !opp.ritiroEsubero) return false;
       if (showSopralluogoOnly && opp.sopralluogoFatto === true) return false;
       return true;
     });
-  }, [opportunities, selectedStage, selectedUser, showRitiroOnly, showSopralluogoOnly]);
+  }, [opportunities, selectedStage, selectedUser, showSopralluogoOnly]);
 
   const stageColorMap = useMemo(() => {
     const m: Record<string, string> = {};
@@ -235,11 +232,10 @@ export default function MappaPage() {
   const resetFilters = () => {
     setSelectedStage("all");
     setSelectedUser("all");
-    setShowRitiroOnly(false);
     setShowSopralluogoOnly(false);
   };
 
-  const hasActiveFilters = selectedStage !== "all" || selectedUser !== "all" || showRitiroOnly || showSopralluogoOnly;
+  const hasActiveFilters = selectedStage !== "all" || selectedUser !== "all" || showSopralluogoOnly;
 
   const formatCurrencyValue = (val: string | null) => {
     if (!val) return "-";
@@ -288,17 +284,6 @@ export default function MappaPage() {
               ))}
             </SelectContent>
           </Select>
-
-          <Button
-            variant={showRitiroOnly ? "default" : "outline"}
-            size="sm"
-            className="h-8 text-xs gap-1"
-            onClick={() => setShowRitiroOnly(!showRitiroOnly)}
-            data-testid="filter-ritiro"
-          >
-            <Truck className="w-3.5 h-3.5" />
-            Materiale da ritirare
-          </Button>
 
           <Button
             variant={showSopralluogoOnly ? "default" : "outline"}
@@ -442,17 +427,6 @@ export default function MappaPage() {
                         )}
 
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "6px" }}>
-                          {opp.ritiroEsubero && (
-                            <span style={{
-                              fontSize: "10px",
-                              padding: "1px 6px",
-                              borderRadius: "4px",
-                              backgroundColor: "#FEF3C7",
-                              color: "#92400E",
-                            }}>
-                              Ritiro materiale
-                            </span>
-                          )}
                           {opp.sopralluogoFatto === false && (
                             <span style={{
                               fontSize: "10px",

@@ -12,12 +12,9 @@ import {
   Building2,
   UsersRound,
   Package,
-  FolderKanban,
-  CalendarDays,
   Map,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   HardHat
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -73,9 +70,6 @@ const allNavigationItems: NavItem[] = [
   { href: "/leads", label: "Contatti", icon: Users, requiresLeadAccess: true },
   { href: "/opportunita", label: "Opportunità", icon: Target, requiresLeadAccess: true },
   ...(APP_CONFIG.moduleCantieri ? [{ href: "/cantieri", label: "Cantieri", icon: HardHat }] : []),
-  ...(APP_CONFIG.moduleProgetti ? [{ href: "/progetti", label: "Progetti", icon: FolderKanban, allowedRoles: ["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"] as UserRole[] }] : []),
-  ...(APP_CONFIG.moduleProxit ? [{ href: "/proxit", label: "Proxit", icon: CalendarDays, allowedRoles: ["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"] as UserRole[] }] : []),
-  ...(APP_CONFIG.moduleSAL ? [{ href: "/sal", label: "SAL", icon: ClipboardList, allowedRoles: ["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"] as UserRole[] }] : []),
   { href: "/mappa", label: "Mappa Cantieri", icon: Map },
   { href: "/catalog", label: "Catalogo", icon: Package, requiresLeadAccess: true },
   { href: "/team", label: "Gestione Team", icon: UsersRound, requiresAdmin: true },

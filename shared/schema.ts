@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, index, uniqueIndex, unique, integer, numeric, jsonb, boolean, AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, index, uniqueIndex, unique, integer, numeric, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -329,14 +329,6 @@ export interface SalePricingData {
   unitCoverage?: number;   // Copertura per unità in mq (es. 200 mq per rotolo). Se definito, quantità vendita = ceil(mq / unitCoverage)
 }
 
-// Tipo per dati montacarichi (dettagli tecnici ponteggio)
-export interface MontacarichiData {
-  tipologia: string;       // Tipologia montacarichi
-  altezzaMt: number;       // Altezza in metri
-  numeroSbarchi: number;   // Numero sbarchi (max 150)
-  tipoSbarchi: string;     // 'SCORREVOLE_DX' | 'SCORREVOLE_SX' | 'SCORREVOLE_INDIFF' | 'ANTA' | 'SOFFIETTO' | 'INDIFFERENTE'
-}
-
 export type PricingData = RentalPricingData | LaborPricingData | TransportPricingData | DocumentPricingData | SimplePricingData | SalePricingData | HandlingParamsData;
 
 // Tabella Leads (Contatti) - Contatti/Clienti con isolamento multi-tenant
@@ -459,29 +451,6 @@ export const opportunities = pgTable("opportunities", {
   // Qualità cantiere (quando vinto)
   siteQuality: text("site_quality").$type<SiteQuality>(),
   
-  // Dettagli tecnici - Trasporti (solo per Noleggio + Manodopera)
-  transpallet: text("transpallet"), // 'NO' | 'SI_NOSTRO' | 'SI_CLIENTE'
-  posizCamion: text("posiz_camion"), // 'FUORI' | 'DENTRO'
-  puoScaricare: text("puo_scaricare"), // 'DURANTE_LAVORI' | 'SENZA_SQUADRA' | 'SENZA_SQUADRA_PLUS' | 'DA_VERIFICARE' | 'ORARI_PRECISI'
-  luogoScarico: text("luogo_scarico").array(), // multi-select array
-  ritiroEsubero: boolean("ritiro_esubero"),
-  cartelliStradali: text("cartelli_stradali"), // 'NO' | 'SI_NOSTRO' | 'SI_CLIENTE'
-  permessiViabilita: text("permessi_viabilita"), // 'NO' | 'SI_NOSTRO' | 'SI_CLIENTE'
-  permessoSosta: text("permesso_sosta"), // 'NO' | 'SI_NOSTRO' | 'SI_CLIENTE'
-  
-  // Dettagli tecnici - Optional Ponteggio
-  ponteggioPerArray: text("ponteggio_per").array(), // multi-select: TETTO, FACCIATA, NUOVA_COSTR, TERRAZZE, CANNE_FUMARIE, GRONDAIE, PIANO_CARICO, CASTELLO_RISALITA, RISTRUTTURAZIONE, FINESTRE_SCURI, DEMOLIZIONE, ALTRO
-  gruCantiere: text("gru_cantiere"), // 'NO' | 'SI_NOSTRO' | 'SI_CLIENTE'
-  luciSegnalazione: text("luci_segnalazione"), // 'NO' | 'SI_NOSTRO' | 'SI_CLIENTE'
-  aCaricoClienteArray: text("a_carico_cliente").array(), // multi-select: RIMOZ_PENSILINE, RIMOZ_TENDE, PUNTELLAMENTI, ISOLAMENTO_CAVI, PERM_OCCUPAZIONE, LEGNAME, ASSITO, PARAPETTI_TETTO, APERTURA_RETI, ALTRO
-  orariLavoro: text("orari_lavoro"), // 'STANDARD' | 'ORARI_PRESTABILITI' | 'SOLO_FESTIVI' | 'NO_MERCATO' | 'NO_SABATO' | 'DA_VERIFICARE'
-  ancoraggi: text("ancoraggi"), // 'OCCHIOLI_CORTI' | 'OCCHIOLI_CAPPOTTO_X' (con valore numerico) | 'SPINTE' | 'A_CRAVATTA' | 'ZAVORRE' | 'PUNTONI' | 'NO_ANCORAGGI' | 'VARIABILE' | 'ALTRO'
-  ponteggioPerAltroNote: text("ponteggio_per_altro_note"),
-  aCaricoClienteAltroNote: text("a_carico_cliente_altro_note"),
-  ancoraggiAltroNote: text("ancoraggi_altro_note"),
-  maestranze: text("maestranze"), // 'SOLO_DIPENDENTI' | 'DIPENDENTI_PERM' | 'DIPENDENTI_ARTIGIANI' | 'DIP_ART_PERM' | 'PARTNERS' | 'DA_VERIFICARE'
-  montacarichi: jsonb("montacarichi").$type<MontacarichiData>(), // { tipologia, altezzaMt, numeroSbarchi, tipoSbarchi }
-  
   // Date indicative lavori (compilate dal venditore prima di chiudere come vinta)
   estimatedStartDate: timestamp("estimated_start_date"),
   estimatedEndDate: timestamp("estimated_end_date"),
@@ -541,23 +510,9 @@ export const userCompanies = pgTable("user_companies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().unique().references(() => users.id),
   companyId: varchar("company_id").notNull().references(() => companies.id),
-  proxitPriority: integer("proxit_priority"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("user_companies_company_id_idx").on(table.companyId),
-]);
-
-// Tabella presenza Proxit - traccia chi è attivo sulla pagina
-export const proxitPresence = pgTable("proxit_presence", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  sessionId: varchar("session_id").notNull(),
-  lastHeartbeat: timestamp("last_heartbeat").notNull().defaultNow(),
-}, (table) => [
-  index("proxit_presence_company_id_idx").on(table.companyId),
-  index("proxit_presence_user_id_idx").on(table.userId),
-  uniqueIndex("proxit_presence_session_uniq").on(table.userId, table.companyId, table.sessionId),
 ]);
 
 // Tabella Invites - Inviti utenti con token magic link
@@ -737,8 +692,6 @@ export const companiesRelations = relations(companies, ({ many }) => ({
   pipelineStages: many(pipelineStages),
   articles: many(articles),
   quotes: many(quotes),
-  projectStages: many(projectStages),
-  projects: many(projects),
 }));
 
 export const articlesRelations = relations(articles, ({ one, many }) => ({
@@ -842,310 +795,6 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   }),
 }));
 
-// Tabella ProjectStages - Fasi del workflow progetti per ogni azienda
-export const projectStages = pgTable("project_stages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  order: integer("order").notNull().default(0),
-  color: text("color").notNull().default("#4563FF"),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("project_stages_company_id_idx").on(table.companyId),
-  index("project_stages_order_idx").on(table.order),
-]);
-
-// Tabella ExternalEngineers - Ingegneri esterni per RDC
-export const externalEngineers = pgTable("external_engineers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  name: text("name").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("external_engineers_company_id_idx").on(table.companyId),
-]);
-
-export const insertExternalEngineerSchema = createInsertSchema(externalEngineers).omit({ id: true, createdAt: true });
-export type ExternalEngineer = typeof externalEngineers.$inferSelect;
-export type InsertExternalEngineer = z.infer<typeof insertExternalEngineerSchema>;
-
-export const projects = pgTable("projects", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  opportunityId: varchar("opportunity_id").notNull().references(() => opportunities.id),
-  quoteId: varchar("quote_id").references(() => quotes.id),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  stageId: varchar("stage_id").references(() => projectStages.id),
-  
-  clientName: text("client_name").notNull(),
-  siteAddress: text("site_address"),
-  siteCity: text("site_city"),
-  siteProvince: text("site_province"),
-  siteZip: text("site_zip"),
-  estimatedStartDate: timestamp("estimated_start_date"),
-  estimatedEndDate: timestamp("estimated_end_date"),
-  sopralluogoFatto: boolean("sopralluogo_fatto").default(false),
-  
-  assignedTechnicianId: varchar("assigned_technician_id").references(() => users.id),
-  externalEngineerId: varchar("external_engineer_id").references(() => externalEngineers.id, { onDelete: "set null" }),
-  priority: text("priority").default("MEDIA"),
-  
-  notes: text("notes"),
-  checklist: jsonb("checklist").$type<{ id: string; label: string; checked: boolean }[]>(),
-  cantiereStatusOverride: text("cantiere_status_override"),
-  stageEnteredAt: timestamp("stage_entered_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("projects_company_id_idx").on(table.companyId),
-  index("projects_opportunity_id_idx").on(table.opportunityId),
-  index("projects_stage_id_idx").on(table.stageId),
-  index("projects_assigned_technician_id_idx").on(table.assignedTechnicianId),
-  index("projects_external_engineer_id_idx").on(table.externalEngineerId),
-]);
-
-// Tabella Project Tasks - Attività/task per il Gantt
-export const projectTasks = pgTable("project_tasks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  name: text("name").notNull(),
-  description: text("description"),
-  startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date").notNull(),
-  progress: integer("progress").notNull().default(0),
-  parentTaskId: varchar("parent_task_id"),
-  dependencyTaskIds: text("dependency_task_ids").array(),
-  assignedUserId: varchar("assigned_user_id").references(() => users.id),
-  color: text("color"),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("project_tasks_project_id_idx").on(table.projectId),
-  index("project_tasks_company_id_idx").on(table.companyId),
-  index("project_tasks_parent_task_id_idx").on(table.parentTaskId),
-]);
-
-// Relazioni ProjectTasks
-export const projectTasksRelations = relations(projectTasks, ({ one }) => ({
-  project: one(projects, {
-    fields: [projectTasks.projectId],
-    references: [projects.id],
-  }),
-  company: one(companies, {
-    fields: [projectTasks.companyId],
-    references: [companies.id],
-  }),
-  assignedUser: one(users, {
-    fields: [projectTasks.assignedUserId],
-    references: [users.id],
-  }),
-}));
-
-// Relazioni ProjectStages
-export const projectStagesRelations = relations(projectStages, ({ one, many }) => ({
-  company: one(companies, {
-    fields: [projectStages.companyId],
-    references: [companies.id],
-  }),
-  projects: many(projects),
-}));
-
-// Relazioni Projects
-export const projectsRelations = relations(projects, ({ one, many }) => ({
-  opportunity: one(opportunities, {
-    fields: [projects.opportunityId],
-    references: [opportunities.id],
-  }),
-  quote: one(quotes, {
-    fields: [projects.quoteId],
-    references: [quotes.id],
-  }),
-  company: one(companies, {
-    fields: [projects.companyId],
-    references: [companies.id],
-  }),
-  stage: one(projectStages, {
-    fields: [projects.stageId],
-    references: [projectStages.id],
-  }),
-  assignedTechnician: one(users, {
-    fields: [projects.assignedTechnicianId],
-    references: [users.id],
-  }),
-  externalEngineer: one(externalEngineers, {
-    fields: [projects.externalEngineerId],
-    references: [externalEngineers.id],
-  }),
-  tasks: many(projectTasks),
-}));
-
-// ========== PROXIT - Pianificazione Operativa ==========
-
-// Tabella Workers - Persone (capisquadra e componenti)
-export const workers = pgTable("workers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  isCaposquadra: boolean("is_caposquadra").notNull().default(false),
-  isInternal: boolean("is_internal").notNull().default(true),
-  city: text("city"),
-  defaultCapoId: varchar("default_capo_id").references((): AnyPgColumn => workers.id, { onDelete: "set null" }),
-  color: text("color").notNull().default("#4563FF"),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  isActive: boolean("is_active").notNull().default(true),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("workers_company_id_idx").on(table.companyId),
-]);
-
-// Tabella Teams - Squadre di artigiani
-export const teams = pgTable("teams", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  paese: text("paese"),
-  color: text("color").notNull().default("#4563FF"),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("teams_company_id_idx").on(table.companyId),
-]);
-
-// Tabella Drivers - Autisti
-export const drivers = pgTable("drivers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  phone: text("phone"),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("drivers_company_id_idx").on(table.companyId),
-]);
-
-// Tabella Vehicles - Mezzi
-export const vehicles = pgTable("vehicles", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  plate: text("plate"),
-  type: text("type"),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("vehicles_company_id_idx").on(table.companyId),
-]);
-
-// Tipo attività per le assegnazioni giornaliere
-export type ActivityType = "MONTAGGIO" | "SMONTAGGIO" | "MONTAGGIO_SMONTAGGIO" | "ECONOMIA" | "CONSEGNA" | "RITIRO" | "CONSEGNA_COMBINATO" | "RITIRO_COMBINATO" | "ESUBERO" | "ESUBERO_COMBINATO" | "MANUTENZIONE" | "INTEGRAZIONE" | "INTEGRAZIONE_COMBINATO" | "FERIE_PIOGGIA_VARIE";
-
-// Tabella TeamMembers - Componenti delle squadre
-export const teamMembers = pgTable("team_members", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  teamId: varchar("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  name: text("name").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("team_members_team_id_idx").on(table.teamId),
-  index("team_members_company_id_idx").on(table.companyId),
-]);
-
-// Tabella DailyAssignments - Assegnazioni giornaliere (righe della griglia Proxit)
-export const dailyAssignments = pgTable("daily_assignments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  projectId: varchar("project_id").references(() => projects.id),
-  date: timestamp("date").notNull(),
-  endDate: timestamp("end_date"),
-  activityType: text("activity_type").$type<ActivityType>().notNull().default("MONTAGGIO"),
-  clientName: text("client_name"),
-  siteCity: text("site_city"),
-  siteProvince: text("site_province"),
-  siteAddress: text("site_address"),
-  scheduledTime: text("scheduled_time"),
-  driverId: varchar("driver_id").references(() => drivers.id),
-  vehicleId: varchar("vehicle_id").references(() => vehicles.id),
-  teamIds: text("team_ids").array(),
-  assemblerCount: integer("assembler_count"),
-  notes: text("notes"),
-  gridNote: text("grid_note"),
-  gridNoteColor: text("grid_note_color"),
-  deliveryType: text("delivery_type"),
-  memberAdjustments: jsonb("member_adjustments").$type<Array<{ memberId: string; action: "remove" | "move" | "add"; toTeamId?: string; date?: string }>>(),
-  workerAssignments: jsonb("worker_assignments").$type<Record<string, Record<string, string[]>>>(),
-  timeSlot: text("time_slot").notNull().default("FULL_DAY"),
-  endDayTimeSlot: text("end_day_time_slot").notNull().default("FULL_DAY"),
-  status: text("status").notNull().default("PIANIFICATA"),
-  isDraft: boolean("is_draft").notNull().default(false),
-  sortOrder: integer("sort_order").notNull().default(0),
-  prePadding: integer("pre_padding").notNull().default(0),
-  externalWorkerCounts: jsonb("external_worker_counts").$type<Record<string, Record<string, number>>>(),
-  externalTeamContacted: jsonb("external_team_contacted").$type<Record<string, Record<string, boolean>>>(),
-  teamDepartureTimes: jsonb("team_departure_times").$type<Record<string, Record<string, string>>>(),
-  teamFreeNumbers: jsonb("team_free_numbers").$type<Record<string, Record<string, number>>>(),
-  teamNotes: jsonb("team_notes").$type<Record<string, Record<string, string>>>(),
-  teamNoteColors: jsonb("team_note_colors").$type<Record<string, Record<string, string>>>(),
-  workingDays: integer("working_days").array().notNull().default([1, 2, 3, 4, 5]),
-  materialType: text("material_type"),
-  materialQuantity: integer("material_quantity"),
-  materials: jsonb("materials").$type<Array<{ type: string; quantity: number }>>(),
-  chi: text("chi"),
-  chiColor: text("chi_color"),
-  cosa: text("cosa"),
-  cosaColor: text("cosa_color"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("daily_assignments_company_id_idx").on(table.companyId),
-  index("daily_assignments_project_id_idx").on(table.projectId),
-  index("daily_assignments_date_idx").on(table.date),
-  index("daily_assignments_driver_id_idx").on(table.driverId),
-]);
-
-// Tabella WarehouseBalances - Saldi magazzino (VILLA, PL, EP) per azienda
-export const warehouseBalances = pgTable("warehouse_balances", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  warehouseType: text("warehouse_type").$type<"VILLA" | "PL" | "EP">().notNull(),
-  date: timestamp("date"),
-  value: numeric("value").notNull().default("0"),
-}, (table) => [
-  index("warehouse_balances_company_id_idx").on(table.companyId),
-]);
-
-export const insertWarehouseBalanceSchema = createInsertSchema(warehouseBalances).omit({
-  id: true,
-});
-export type InsertWarehouseBalance = z.infer<typeof insertWarehouseBalanceSchema>;
-export type WarehouseBalance = typeof warehouseBalances.$inferSelect;
-
-// Relazioni Proxit
-export const workersRelations = relations(workers, ({ one }) => ({
-  company: one(companies, { fields: [workers.companyId], references: [companies.id] }),
-}));
-
-export const teamsRelations = relations(teams, ({ one }) => ({
-  company: one(companies, { fields: [teams.companyId], references: [companies.id] }),
-}));
-
-export const driversRelations = relations(drivers, ({ one }) => ({
-  company: one(companies, { fields: [drivers.companyId], references: [companies.id] }),
-}));
-
-export const vehiclesRelations = relations(vehicles, ({ one }) => ({
-  company: one(companies, { fields: [vehicles.companyId], references: [companies.id] }),
-}));
-
-export const dailyAssignmentsRelations = relations(dailyAssignments, ({ one }) => ({
-  company: one(companies, { fields: [dailyAssignments.companyId], references: [companies.id] }),
-  project: one(projects, { fields: [dailyAssignments.projectId], references: [projects.id] }),
-  driver: one(drivers, { fields: [dailyAssignments.driverId], references: [drivers.id] }),
-  vehicle: one(vehicles, { fields: [dailyAssignments.vehicleId], references: [vehicles.id] }),
-}));
-
 // Schema di validazione per inserimento
 export const insertCompanySchema = createInsertSchema(companies).omit({
   id: true,
@@ -1209,23 +858,6 @@ export const insertQuoteItemSchema = createInsertSchema(quoteItems).omit({
   createdAt: true,
 });
 
-export const insertProjectStageSchema = createInsertSchema(projectStages).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertProjectSchema = createInsertSchema(projects).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
 // Tipi TypeScript
 export type Company = typeof companies.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -1259,35 +891,6 @@ export type InsertQuote = z.infer<typeof insertQuoteSchema>;
 
 export type QuoteItem = typeof quoteItems.$inferSelect;
 export type InsertQuoteItem = z.infer<typeof insertQuoteItemSchema>;
-
-export type ProjectStage = typeof projectStages.$inferSelect;
-export type InsertProjectStage = z.infer<typeof insertProjectStageSchema>;
-
-export type Project = typeof projects.$inferSelect;
-export type InsertProject = z.infer<typeof insertProjectSchema>;
-
-export type ProjectTask = typeof projectTasks.$inferSelect;
-export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
-
-export const insertWorkerSchema = createInsertSchema(workers).omit({ id: true, createdAt: true });
-export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, createdAt: true });
-export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true, createdAt: true });
-export const insertVehicleSchema = createInsertSchema(vehicles).omit({ id: true, createdAt: true });
-export const insertDailyAssignmentSchema = createInsertSchema(dailyAssignments).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({ id: true, createdAt: true });
-
-export type Worker = typeof workers.$inferSelect;
-export type InsertWorker = z.infer<typeof insertWorkerSchema>;
-export type Team = typeof teams.$inferSelect;
-export type InsertTeam = z.infer<typeof insertTeamSchema>;
-export type Driver = typeof drivers.$inferSelect;
-export type InsertDriver = z.infer<typeof insertDriverSchema>;
-export type Vehicle = typeof vehicles.$inferSelect;
-export type InsertVehicle = z.infer<typeof insertVehicleSchema>;
-export type DailyAssignment = typeof dailyAssignments.$inferSelect;
-export type InsertDailyAssignment = z.infer<typeof insertDailyAssignmentSchema>;
-export type TeamMember = typeof teamMembers.$inferSelect;
-export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 
 export const creditsafeReports = pgTable("creditsafe_reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1375,37 +978,6 @@ export const insertReminderSchema = createInsertSchema(reminders).omit({ id: tru
 export type Reminder = typeof reminders.$inferSelect;
 export type InsertReminder = z.infer<typeof insertReminderSchema>;
 
-// Tabella Billing Profiles - Profili di fatturazione per tipo appalto (Privato/Pubblico)
-export const billingProfiles = pgTable("billing_profiles", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  profileType: text("profile_type").$type<"PRIVATE" | "PUBLIC">().notNull(),
-  companyName: text("company_name").notNull(),
-  vatNumber: text("vat_number"),
-  fiscalCode: text("fiscal_code"),
-  address: text("address"),
-  city: text("city"),
-  zip: text("zip"),
-  province: text("province"),
-  phone: text("phone"),
-  email: text("email"),
-  pec: text("pec"),
-  sdiCode: text("sdi_code"),
-  iban: text("iban"),
-  shareCapital: text("share_capital"),
-  logoHeaderPath: text("logo_header_path"),
-  logoCoverPath: text("logo_cover_path"),
-  logoCoverSmallPath: text("logo_cover_small_path"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("billing_profiles_company_id_idx").on(table.companyId),
-]);
-
-export const insertBillingProfileSchema = createInsertSchema(billingProfiles).omit({ id: true, createdAt: true, updatedAt: true });
-export type BillingProfile = typeof billingProfiles.$inferSelect;
-export type InsertBillingProfile = z.infer<typeof insertBillingProfileSchema>;
-
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
@@ -1448,22 +1020,6 @@ export const insertNotificationPreferenceSchema = createInsertSchema(notificatio
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferenceSchema>;
 
-// Tabella ClauseOverrides - Testi personalizzati per le clausole dello Step 4
-export const clauseOverrides = pgTable("clause_overrides", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  clauseId: text("clause_id").notNull(), // ID della clausola (es. "pont_facciata_copertura")
-  text: text("text").notNull(),           // Testo personalizzato
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  unique("clause_overrides_company_clause_unique").on(table.companyId, table.clauseId),
-  index("clause_overrides_company_id_idx").on(table.companyId),
-]);
-
-export const insertClauseOverrideSchema = createInsertSchema(clauseOverrides).omit({ id: true, updatedAt: true });
-export type ClauseOverride = typeof clauseOverrides.$inferSelect;
-export type InsertClauseOverride = z.infer<typeof insertClauseOverrideSchema>;
-
 // Tabella SalesTargets - Obiettivi mensili per venditore
 export const salesTargets = pgTable("sales_targets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1487,57 +1043,6 @@ export type InsertSalesTarget = z.infer<typeof insertSalesTargetSchema>;
 // ========== SAL - Stato Avanzamento Lavori ==========
 
 // Enum per stato SAL
-export const salStatusEnum = ["BOZZA", "VERIFICATO", "INVIATO"] as const;
-export type SalStatus = typeof salStatusEnum[number];
-
-// Tabella sal_periods - Un record per cantiere per mese
-export const salPeriods = pgTable("sal_periods", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
-  period: text("period").notNull(), // "YYYY-MM"
-  status: text("status").$type<SalStatus>().notNull().default("BOZZA"),
-  notes: text("notes"),
-  isFinalInvoice: boolean("is_final_invoice").notNull().default(false),
-  sentAt: timestamp("sent_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("sal_periods_company_id_idx").on(table.companyId),
-  index("sal_periods_project_id_idx").on(table.projectId),
-  index("sal_periods_period_idx").on(table.period),
-  unique("sal_periods_project_period_unique").on(table.projectId, table.period),
-]);
-
-// Tabella sal_voci - Righe di fatturazione per ogni SAL
-export const salVoci = pgTable("sal_voci", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  salPeriodId: varchar("sal_period_id").notNull().references(() => salPeriods.id, { onDelete: "cascade" }),
-  companyId: varchar("company_id").notNull().references(() => companies.id),
-  description: text("description").notNull(),
-  quantity: numeric("quantity").notNull().default("1"),
-  um: text("um").notNull().default("cad"),
-  unitPrice: numeric("unit_price").notNull().default("0"),
-  discountPercent: numeric("discount_percent").notNull().default("0"),
-  total: numeric("total").notNull().default("0"),
-  vatRate: text("vat_rate").$type<VatRate>().notNull().default("22"),
-  phase: text("phase").notNull().default("NOLEGGIO"),
-  sourceQuoteItemId: varchar("source_quote_item_id"),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("sal_voci_sal_period_id_idx").on(table.salPeriodId),
-  index("sal_voci_company_id_idx").on(table.companyId),
-]);
-
-export const insertSalPeriodSchema = createInsertSchema(salPeriods).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertSalVoceSchema = createInsertSchema(salVoci).omit({ id: true, createdAt: true });
-
-export type SalPeriod = typeof salPeriods.$inferSelect;
-export type InsertSalPeriod = z.infer<typeof insertSalPeriodSchema>;
-export type SalVoce = typeof salVoci.$inferSelect;
-export type InsertSalVoce = z.infer<typeof insertSalVoceSchema>;
-
 // ============ CATALOGO LATTONERIA ============
 // Tabelle globali condivise tra tutte le aziende (no companyId).
 // Materiali (es. Rame, Alluminio, Zinco) con peso specifico in kg/m³.

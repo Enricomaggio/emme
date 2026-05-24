@@ -705,15 +705,6 @@ leadsRouter.get("/leads/:id/related-notes", isAuthenticated, async (req, res) =>
         });
       }
 
-      const project = await storage.getProjectByOpportunity(opp.id, userCompany.companyId);
-      if (project && project.notes) {
-        relatedNotes.push({
-          type: "project",
-          entityId: project.id,
-          title: project.clientName,
-          notes: project.notes,
-        });
-      }
     }
 
     res.json(relatedNotes);

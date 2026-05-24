@@ -171,7 +171,7 @@ export default function JoinPage() {
       <Card className={`w-full max-w-md transition-opacity duration-700 ${fadeIn ? "opacity-100" : "opacity-0"}`}>
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src="/logo-ponteggi.png" alt={APP_CONFIG.appName} className="h-12 object-contain" />
+            <img src="/gdm-logo.png" alt={APP_CONFIG.appName} className="h-12 object-contain" />
           </div>
           <CardTitle data-testid="text-error-title">{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
@@ -211,7 +211,7 @@ export default function JoinPage() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <img src="/logo-ponteggi.png" alt={APP_CONFIG.appName} className="h-12 object-contain" />
+              <img src="/gdm-logo.png" alt={APP_CONFIG.appName} className="h-12 object-contain" />
             </div>
             <CardTitle data-testid="text-welcome">Registrazione completata</CardTitle>
             <CardDescription>
@@ -231,7 +231,7 @@ export default function JoinPage() {
       <Card className={`w-full max-w-md transition-opacity duration-700 ${fadeIn ? "opacity-100" : "opacity-0"}`}>
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src="/logo-ponteggi.png" alt={APP_CONFIG.appName} className="h-12 object-contain" />
+            <img src="/gdm-logo.png" alt={APP_CONFIG.appName} className="h-12 object-contain" />
           </div>
           <CardTitle data-testid="text-morpheus-title">Completa registrazione</CardTitle>
           <CardDescription>

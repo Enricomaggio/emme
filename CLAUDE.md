@@ -6,10 +6,7 @@ Questo file è la fonte di verità per qualsiasi agente AI (Claude Code, Cursor,
 
 ## Project Overview
 
-Gestionale custom multi-modulo (CRM + ERP + Planning) sviluppato per il settore edile/lattoneria. Architettura multi-tenant: ogni azienda cliente è isolata tramite `companyId`. Il sistema gestisce l'intero ciclo commerciale e operativo: contatti → opportunità → preventivi → cantieri → pianificazione squadre.
-
-**Cliente attivo:** GDM Lattonerie s.r.l. (Trevignano TV)
-**Istanza base:** fork di `gestionale-dado` (DaDo Ponteggi) con moduli ponteggi nascosti tramite feature flag.
+Gestionale custom multi-modulo (CRM + preventivi + cantieri) sviluppato per **GDM Lattonerie s.r.l.** (Trevignano TV), settore lattoneria/coperture metalliche. Architettura multi-tenant: ogni azienda è isolata tramite `companyId`. Il sistema gestisce l'intero ciclo commerciale e operativo: contatti → opportunità → preventivi → cantieri → nota lavori.
 
 ---
 
@@ -22,7 +19,7 @@ Gestionale custom multi-modulo (CRM + ERP + Planning) sviluppato per il settore 
 | ORM | Drizzle ORM + drizzle-zod |
 | Database | PostgreSQL (Railway) |
 | Auth | express-session + passport-local + bcryptjs |
-| PDF | @react-pdf/renderer |
+| PDF | @react-pdf/renderer (lato client) |
 | Form | react-hook-form + zod |
 | Mappe | Leaflet + react-leaflet |
 | Grafici | Recharts |
@@ -56,7 +53,7 @@ Il codice eredita anni di fix specifici. Una funzione "brutta" potrebbe contener
 La logica di business vive nel frontend dove possibile. Il backend si occupa solo di persistenza e chiamate API esterne. I router devono essere thin.
 
 ### 4. Nessuna contabilità
-Questo sistema gestisce il **cervello operativo** (preventivi, cantieri, squadre). Non tocca contabilità, fatturazione attiva o passiva, registri IVA. Non aggiungere mai logica fiscale.
+Questo sistema gestisce il **cervello operativo** (preventivi, cantieri). Non tocca contabilità, fatturazione attiva o passiva, registri IVA. Non aggiungere mai logica fiscale.
 
 ### 5. Multi-tenancy sempre
 Ogni query al DB deve filtrare per `companyId`. Non esistono dati globali (eccetto tabelle di sistema come `users` per SUPER_ADMIN).
@@ -86,14 +83,19 @@ La configurazione Vite è già ottimizzata per il dual-server (Express + Vite su
 │   │   │   ├── QuotePdfActions.tsx
 │   │   │   └── quote-pdf-utils.ts
 │   │   └── index.css         # Stili globali Tailwind + variabili CSS
-│   ├── public/               # Asset statici (logo, favicon)
+│   ├── public/               # Asset statici (solo gdm-logo.png e favicon.png)
 │   └── index.html
 │
 ├── server/                  # Backend Express
 │   ├── index.ts              # Entry point, middleware, startup
-│   ├── auth.ts               # JWT middleware, requireRole, requireAuth
+│   ├── auth.ts               # Middleware requireRole, requireAuth
 │   ├── db.ts                 # Pool PostgreSQL, bootstrapDatabase()
-│   ├── storage.ts            # Data access layer (Drizzle queries)
+│   ├── storage/              # Data access layer — un file per dominio
+│   │   ├── index.ts          # Aggregatore — esporta oggetto `storage` unificato
+│   │   ├── pipeline.ts       # Opportunities, stages, activity logs
+│   │   ├── settings.ts       # PaymentMethods, LeadSources, Reminders
+│   │   ├── analytics.ts      # SalesTargets, statistiche vinte/perse
+│   │   └── ...               # altri moduli storage
 │   ├── routes.ts             # Registrazione router
 │   ├── routers/              # Un file per dominio
 │   │   ├── auth.router.ts
@@ -101,9 +103,11 @@ La configurazione Vite è già ottimizzata per il dual-server (Express + Vite su
 │   │   ├── opportunities.router.ts
 │   │   ├── quotes.router.ts
 │   │   ├── catalog.router.ts
+│   │   ├── work-orders.router.ts  # Nota lavori + SAL cantieri
 │   │   ├── payment-methods.router.ts
 │   │   ├── company.router.ts
 │   │   ├── users.router.ts
+│   │   ├── notifications.router.ts
 │   │   └── admin.router.ts
 │   └── utils/
 │       ├── accessContext.ts  # Risoluzione company/ruolo per multi-tenancy
@@ -113,7 +117,7 @@ La configurazione Vite è già ottimizzata per il dual-server (Express + Vite su
 ├── shared/
 │   └── schema.ts             # Tabelle Drizzle + tipi + insert schema (fonte di verità)
 │
-├── migrations/               # SQL migrations idempotenti (0001 → 0032+)
+├── migrations/               # SQL migrations idempotenti (0001 → 0038+)
 ├── scripts/                  # Utility (post-merge.sh, seed, reset-password)
 └── script/build.ts           # Build produzione
 ```
@@ -126,20 +130,17 @@ La configurazione Vite è già ottimizzata per il dual-server (Express + Vite su
 |---|---|---|
 | `/` | `dashboard.tsx` | KPI e sommario |
 | `/leads` | `leads.tsx` | Lista contatti/clienti |
+| `/leads/duplicates` | `lead-duplicates.tsx` | Rilevazione e merge contatti duplicati |
 | `/leads/:id` | `lead-detail.tsx` | Dettaglio contatto con tab |
-| `/opportunities` | `opportunita.tsx` | Pipeline vendite |
+| `/opportunita` | `opportunita.tsx` | Pipeline vendite (kanban) |
+| `/cantieri` | `cantieri.tsx` | Vista cantieri attivi con SAL inline |
+| `/cantieri/:id/nuova-nl` | `create-work-order.tsx` | Wizard creazione Nota Lavori |
 | `/quotes/:id` | `quote-editor.tsx` | Editor preventivo lattoneria |
 | `/catalog` | `catalog.tsx` | Catalogo materiali e articoli |
-| `/settings` | `settings.tsx` | Impostazioni azienda e metodi pagamento |
+| `/impostazioni` | `settings.tsx` | Impostazioni azienda e metodi pagamento |
 | `/team` | `team.tsx` | Gestione utenti |
 | `/mappa` | `mappa.tsx` | Vista mappa contatti |
 | `/admin` | `admin.tsx` | Solo SUPER_ADMIN |
-
-**Pagine nascoste per GDM** (visibili nel codice, non nel menu):
-- `/proxit` — Pianificazione squadre ponteggi
-- `/gantt` — Gantt cantieri
-- `/sal` — Stato avanzamento lavori
-- `/progetti` — Gestione commesse
 
 ---
 
@@ -150,10 +151,8 @@ Lette da `client/src/lib/config.ts` come `APP_CONFIG`.
 | Variabile | Valore GDM | Effetto |
 |---|---|---|
 | `VITE_APP_NAME` | `GDM Lattonerie` | Nome app nel browser |
-| `VITE_MODULE_PONTEGGI` | `false` | Nasconde campi ponteggi nel catalogo |
-| `VITE_MODULE_PROXIT` | `false` | Nasconde voce Proxit dalla sidebar |
 | `VITE_MODULE_AMMINISTRAZIONE` | `false` | Nasconde tab Amministrazione nel lead |
-| `VITE_QUOTE_EDITOR_TYPE` | `lattoneria` | Usa `quote-editor.tsx` invece dello scaffolding |
+| `VITE_MODULE_CANTIERI` | (default `true`) | Mostra voce Cantieri nella sidebar |
 
 ---
 
@@ -163,7 +162,7 @@ Lette da `client/src/lib/config.ts` come `APP_CONFIG`.
 SUPER_ADMIN      → accesso totale a tutti i tenant
 COMPANY_ADMIN    → accesso totale alla propria azienda
 SALES_AGENT      → accesso a lead/opportunità assegnati
-TECHNICIAN       → solo moduli operativi (cantieri, Proxit)
+TECHNICIAN       → moduli operativi (cantieri, note lavori)
 ```
 
 Protezione route: `requireRole(...)` in `server/auth.ts`.
@@ -179,9 +178,11 @@ Protezione route: `requireRole(...)` in `server/auth.ts`.
 | `leads` | Contatti / clienti |
 | `contact_referents` | Referenti per lead aziendali |
 | `pipeline_stages` | Stadi pipeline (configurabili per azienda) |
-| `opportunities` | Opportunità commerciali |
-| `quotes` | Preventivi (con JSONB `discounts`, `globalParams`) |
+| `opportunities` | Opportunità commerciali (include campi cantiere: `siteStatus`, coordinate GPS, ecc.) |
+| `quotes` | Preventivi (con JSONB `discounts`) |
 | `quote_items` | Righe preventivo (type: LATTONERIA/ARTICOLO/GIORNATE/MANUALE) |
+| `work_orders` | Note lavori collegate a un'opportunità |
+| `work_order_items` | Righe nota lavori |
 | `materials` | Materiali lattoneria (con `priceMode`: SINGLE/PER_VARIANT) |
 | `material_thicknesses` | Spessori con prezzo €/kg |
 | `material_finishes` | Finiture per spessore |
@@ -190,21 +191,21 @@ Protezione route: `requireRole(...)` in `server/auth.ts`.
 | `labor_rates` | Tariffe manodopera |
 | `payment_methods` | Metodi di pagamento (per azienda) |
 | `lead_sources` | Sorgenti lead |
+| `reminders` | Promemoria su lead/opportunità |
+| `notifications` | Notifiche in-app |
+| `sales_targets` | Obiettivi mensili per venditore |
 
 ---
 
-## Convenzioni di naming
+## Pipeline cantieri — Stadi post-vendita
 
-- **File componenti:** `kebab-case.tsx` (es. `lead-detail.tsx`, `quote-editor.tsx`)
-- **Componenti React:** `PascalCase` (es. `QuotePdfDocument`)
-- **Router Express:** `dominio.router.ts` (es. `leads.router.ts`)
-- **Variabili DB:** `snake_case` (Drizzle mappa automaticamente a `camelCase`)
-- **Tipi shared:** definiti in `shared/schema.ts` con pattern:
-  - `pgTable(...)` → tabella
-  - `createInsertSchema(table).omit({...})` → insert schema
-  - `z.infer<typeof insertSchema>` → insert type
-  - `typeof table.$inferSelect` → select type
-- **Test IDs:** `{azione}-{target}` (es. `button-submit`, `input-email`, `row-quote-item-${uid}`)
+Dopo lo stadio "Vinto", le opportunità seguono questa progressione:
+
+```
+Vinto → Cantiere in corso → Nota Lavori da Inviare → Nota Lavori Inviata → Da Fatturare
+```
+
+Il campo `opportunities.siteStatus` traccia lo stato operativo del cantiere (`ACTIVE`, `COMPLETED`, ecc.).
 
 ---
 
@@ -214,9 +215,9 @@ Formula per righe `LATTONERIA`:
 
 ```
 sviluppo_cm / 100 × metri_lineari × (spessore_mm / 1000) × densità_kg_m3 = weightKg
-weightKg × costo_€_kg = costRow
+weightKg × prezzo_€_kg × moltiplicatore_finitura = costRow
 costRow × (1 + marginPercent/100) = baseTotal
-baseTotal × (1 - discountPercent/100) = totalRow
+applyDiscountOrOverride(baseTotal, discountPercent, overrideTotal) = totalRow
 ```
 
 I prezzi vengono **congelati al salvataggio**. Le modifiche al catalogo non aggiornano preventivi già salvati (comportamento intenzionale).
@@ -242,7 +243,7 @@ const mutation = useMutation({
 ```
 
 ### Storage (backend)
-Tutte le query passano per `server/storage.ts`. I router non fanno query dirette al DB.
+Tutte le query passano per `server/storage/index.ts`. I router non fanno query dirette al DB.
 
 ### Navigazione "indietro"
 Usare sempre `window.history.back()` per i pulsanti ←, mai URL hardcoded.
@@ -271,8 +272,7 @@ PORT=5000
 
 ## Note operative
 
-- **DB migrations:** file SQL in `migrations/` con `ADD COLUMN IF NOT EXISTS` (idempotenti). Eseguiti automaticamente da `bootstrapDatabase()` all'avvio.
+- **DB migrations:** i file SQL in `migrations/` sono applicati con `npm run db:push` (drizzle-kit push). Non vengono eseguiti automaticamente all'avvio — `bootstrapDatabase()` contiene solo le migration inline per le tabelle core.
 - **Post-merge:** dopo ogni merge di task agent, `scripts/post-merge.sh` esegue `drizzle-kit push` per allineare lo schema.
-- **Errori pre-esistenti non bloccanti:** `column "is_internal" does not exist` (admin.router.ts — tabella workers legacy) — non toccare.
 - **PDF generation:** lato client con `@react-pdf/renderer`. Logo caricato via URL assoluto dal public folder.
 - **Email preventivo:** mailto link, nessun server SMTP. Il PDF viene scaricato e allegato manualmente.

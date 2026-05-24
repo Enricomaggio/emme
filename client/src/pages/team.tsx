@@ -69,15 +69,6 @@ type TeamUser = {
   createdAt: string | null;
 };
 
-type ProxitPriorityItem = {
-  userId: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: string;
-  proxitPriority: number | null;
-};
-
 const inviteFormSchema = z.object({
   email: z.string().email("Email non valida"),
   role: z.enum(["COMPANY_ADMIN", "SALES_AGENT", "TECHNICIAN"]),
@@ -368,49 +359,6 @@ export default function TeamPage() {
     setUserToSuspend(teamUser);
     setSuspendDialogOpen(true);
   };
-
-  const [syncResult, setSyncResult] = useState<{ createdCount: number; skippedCount: number; totalVinto: number } | null>(null);
-
-  const syncProjectsMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/admin/sync-missing-projects"),
-    onSuccess: async (res) => {
-      const data = await res.json();
-      setSyncResult(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Sync completato", description: data.message });
-    },
-    onError: () => {
-      toast({ title: "Errore", description: "Errore durante la sincronizzazione", variant: "destructive" });
-    },
-  });
-
-  const { data: proxitList = [], isLoading: proxitListLoading } = useQuery<ProxitPriorityItem[]>({
-    queryKey: ["/api/proxit/priority-list"],
-  });
-
-  const updateProxitPriorityMutation = useMutation({
-    mutationFn: async ({ userId, proxitPriority }: { userId: string; proxitPriority: number | null }) => {
-      await apiRequest("PATCH", `/api/users/${userId}/proxit-priority`, { proxitPriority });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/proxit/priority-list"] });
-    },
-    onError: () => {
-      toast({ title: "Errore", description: "Impossibile aggiornare la priorità Proxit.", variant: "destructive" });
-    },
-  });
-
-  const swapProxitPriorityMutation = useMutation({
-    mutationFn: async ({ userIdA, userIdB }: { userIdA: string; userIdB: string }) => {
-      await apiRequest("POST", "/api/proxit/swap-priority", { userIdA, userIdB });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/proxit/priority-list"] });
-    },
-    onError: () => {
-      toast({ title: "Errore", description: "Impossibile scambiare le priorità Proxit.", variant: "destructive" });
-    },
-  });
 
   const canManageTeam = user?.role === "COMPANY_ADMIN" || user?.role === "SUPER_ADMIN";
 

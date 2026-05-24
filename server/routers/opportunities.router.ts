@@ -417,19 +417,6 @@ opportunitiesRouter.patch("/opportunities/:id", isAuthenticated, async (req, res
       }
     }
 
-    if (validatedData.sopralluogoFatto !== undefined) {
-      try {
-        const linkedProject = await storage.getProjectByOpportunity(opportunity.id, userCompany.companyId);
-        if (linkedProject) {
-          await storage.updateProject(linkedProject.id, userCompany.companyId, {
-            sopralluogoFatto: validatedData.sopralluogoFatto,
-          } as any);
-        }
-      } catch (syncErr) {
-        console.error("Error syncing sopralluogoFatto to project:", syncErr);
-      }
-    }
-
     // Auto-geocoding quando cambia l'indirizzo cantiere
     if ((validatedData.siteAddress || validatedData.siteCity) && !validatedData.siteLatitude) {
       const addr = `${opportunity.siteAddress || ""} ${opportunity.siteZip || ""} ${opportunity.siteCity || ""} Italia`;
@@ -531,121 +518,12 @@ opportunitiesRouter.put("/opportunities/:id/move", isAuthenticated, async (req, 
       });
     }
 
-    // Se si sposta FUORI da "Vinto", elimina il progetto collegato e notifica i tecnici
-    if (previousStage?.name === "Vinto" && newStage?.name !== "Vinto") {
-      try {
-        const existingProject = await storage.getProjectByOpportunity(opportunity.id, userCompany.companyId);
-        if (existingProject) {
-          await storage.deleteProject(existingProject.id, userCompany.companyId);
-          console.log(`Progetto eliminato: opportunità "${opportunity.title}" spostata da Vinto a ${newStage?.name}`);
-          try {
-            await storage.createNotificationsForCompanyRoles(
-              userCompany.companyId,
-              ["TECHNICIAN"],
-              {
-                type: "PROJECT_CANCELLED",
-                title: "Cantiere annullato",
-                message: `${existingProject.clientName} — verifica eventuali lavori già eseguiti`,
-                link: "/sal",
-              }
-            );
-          } catch (notifErr) {
-            console.error("Error sending PROJECT_CANCELLED notification:", notifErr);
-          }
-        }
-      } catch (projErr) {
-        console.error("Error deleting project on Vinto exit:", projErr);
-      }
-    }
-
     // Imposta siteStatus = "ACTIVE" quando opportunità passa a "Vinto"
     if (newStage && newStage.name === "Vinto") {
       try {
         await storage.updateOpportunity(opportunity.id, userCompany.companyId, { siteStatus: "ACTIVE" } as any);
       } catch (siteErr) {
         console.error("Error setting siteStatus=ACTIVE on Vinto:", siteErr);
-      }
-    }
-
-    // Auto-creazione progetto quando opportunità passa a "Vinto"
-    if (newStage && newStage.name === "Vinto") {
-      try {
-        const existingProject = await storage.getProjectByOpportunity(opportunity.id, userCompany.companyId);
-        if (!existingProject) {
-          const lead = await storage.getLead(opportunity.leadId, userCompany.companyId);
-          const clientName = lead ? (lead.entityType === "COMPANY" && lead.name ? lead.name : `${lead.firstName} ${lead.lastName}`) : opportunity.title;
-
-          const projectStagesForCompany = await storage.getProjectStagesByCompany(userCompany.companyId);
-          let firstStageId: string | null = null;
-          if (projectStagesForCompany.length === 0) {
-            const defaultProjectStages = [
-              { name: "Acquisti", order: 1, color: "#4563FF" },
-              { name: "Ricorrenti", order: 2, color: "#8B5CF6" },
-              { name: "Da preparare", order: 3, color: "#F59E0B" },
-              { name: "In lavorazione", order: 4, color: "#3B82F6" },
-              { name: "In attesa di conferma progetto", order: 5, color: "#EC4899" },
-              { name: "In attesa di RDC (Zanella)", order: 6, color: "#F97316" },
-              { name: "In attesa di RDC (Damiani)", order: 7, color: "#EF4444" },
-              { name: "Completata", order: 8, color: "#059669" },
-            ];
-            for (const ps of defaultProjectStages) {
-              const created = await storage.createProjectStage({ ...ps, companyId: userCompany.companyId });
-              if (ps.order === 1) firstStageId = created.id;
-            }
-          } else {
-            firstStageId = projectStagesForCompany[0].id;
-          }
-
-          const projectData: any = {
-            opportunityId: opportunity.id,
-            companyId: userCompany.companyId,
-            clientName,
-            sopralluogoFatto: opportunity.sopralluogoFatto ?? false,
-            stageId: firstStageId,
-          };
-          if (opportunity.siteAddress) projectData.siteAddress = opportunity.siteAddress;
-          if (opportunity.siteCity) projectData.siteCity = opportunity.siteCity;
-          if (opportunity.siteProvince) projectData.siteProvince = opportunity.siteProvince;
-          if (opportunity.siteZip) projectData.siteZip = opportunity.siteZip;
-          if (opportunity.estimatedStartDate) projectData.estimatedStartDate = new Date(opportunity.estimatedStartDate);
-          if (opportunity.estimatedEndDate) projectData.estimatedEndDate = new Date(opportunity.estimatedEndDate);
-
-          await storage.createProject(projectData);
-          console.log(`Progetto auto-creato per opportunità "${opportunity.title}" (${opportunity.id})`);
-
-          try {
-            const siteInfo = opportunity.siteAddress ? ` - ${opportunity.siteAddress}` : '';
-            await storage.createNotificationsForCompanyRoles(
-              userCompany.companyId,
-              ["TECHNICIAN"],
-              {
-                type: "NEW_PROJECT",
-                title: "Nuovo cantiere acquisito",
-                message: `${clientName}${siteInfo}`,
-                link: "/progetti",
-                isRead: false,
-              }
-            );
-
-            const freshOpp = await storage.getOpportunity(opportunity.id, userCompany.companyId);
-            const sq = (freshOpp as any)?.siteQuality;
-            if (sq === "PHOTO_VIDEO" || sq === "PHOTO_ONLY") {
-              const estimatedStart = (freshOpp as any)?.estimatedStartDate;
-              if (estimatedStart) {
-                const scheduledAt = new Date(estimatedStart);
-                scheduledAt.setDate(scheduledAt.getDate() - 10);
-                await storage.updateOpportunity(opportunity.id, userCompany.companyId, {
-                  photoNotificationScheduledAt: scheduledAt,
-                  photoNotificationSentAt: null,
-                });
-              }
-            }
-          } catch (notifError) {
-            console.error("Errore nella creazione notifiche:", notifError);
-          }
-        }
-      } catch (projectError) {
-        console.error("Errore nella creazione automatica del progetto:", projectError);
       }
     }
 
@@ -713,25 +591,6 @@ opportunitiesRouter.post("/opportunities/:id/duplicate", isAuthenticated, async 
       siteLongitude: sourceOpp.siteLongitude,
       lostReason: null,
       siteQuality: null,
-      transpallet: sourceOpp.transpallet,
-      posizCamion: sourceOpp.posizCamion,
-      puoScaricare: sourceOpp.puoScaricare,
-      luogoScarico: sourceOpp.luogoScarico,
-      ritiroEsubero: sourceOpp.ritiroEsubero,
-      cartelliStradali: sourceOpp.cartelliStradali,
-      permessiViabilita: sourceOpp.permessiViabilita,
-      permessoSosta: sourceOpp.permessoSosta,
-      ponteggioPerArray: sourceOpp.ponteggioPerArray,
-      gruCantiere: sourceOpp.gruCantiere,
-      luciSegnalazione: sourceOpp.luciSegnalazione,
-      aCaricoClienteArray: sourceOpp.aCaricoClienteArray,
-      orariLavoro: sourceOpp.orariLavoro,
-      ancoraggi: sourceOpp.ancoraggi,
-      ponteggioPerAltroNote: sourceOpp.ponteggioPerAltroNote,
-      aCaricoClienteAltroNote: sourceOpp.aCaricoClienteAltroNote,
-      ancoraggiAltroNote: sourceOpp.ancoraggiAltroNote,
-      maestranze: sourceOpp.maestranze,
-      montacarichi: sourceOpp.montacarichi,
       estimatedStartDate: sourceOpp.estimatedStartDate,
       estimatedEndDate: sourceOpp.estimatedEndDate,
       sopralluogoFatto: sourceOpp.sopralluogoFatto,
@@ -858,68 +717,6 @@ opportunitiesRouter.delete("/opportunities/:id", isAuthenticated, async (req, re
   }
 });
 
-// POST /api/opportunities/:id/create-project - Crea progetto manualmente da opportunità
-opportunitiesRouter.post("/opportunities/:id/create-project", isAuthenticated, async (req, res) => {
-  try {
-    const { role, id: userId } = req.user!;
-    if (role !== "COMPANY_ADMIN" && role !== "SUPER_ADMIN") {
-      return res.status(403).json({ message: "Accesso negato" });
-    }
-    const userCompany = await resolveUserCompany(userId, role, req);
-    if (!userCompany?.companyId) {
-      return res.status(403).json({ message: "Utente non associato a nessuna azienda" });
-    }
-    const companyId = userCompany.companyId;
-    const opp = await storage.getOpportunity(req.params.id, companyId);
-    if (!opp) return res.status(404).json({ message: "Opportunità non trovata" });
-
-    const existingProject = await storage.getProjectByOpportunity(opp.id, companyId);
-    if (existingProject) {
-      return res.status(409).json({ message: "Progetto già esistente per questa opportunità", projectId: existingProject.id });
-    }
-
-    const projectStagesForCompany = await storage.getProjectStagesByCompany(companyId);
-    let firstStageId: string | null = null;
-    if (projectStagesForCompany.length === 0) {
-      const defaultProjectStages = [
-        { name: "Acquisti", order: 1, color: "#4563FF" },
-        { name: "Ricorrenti", order: 2, color: "#8B5CF6" },
-        { name: "Da preparare", order: 3, color: "#F59E0B" },
-        { name: "In lavorazione", order: 4, color: "#3B82F6" },
-      ];
-      for (const ps of defaultProjectStages) {
-        const created = await storage.createProjectStage({ ...ps, companyId });
-        if (ps.order === 1) firstStageId = created.id;
-      }
-    } else {
-      firstStageId = projectStagesForCompany[0].id;
-    }
-
-    const lead = opp.leadId ? await storage.getLead(opp.leadId, companyId) : null;
-    const clientName = lead
-      ? (lead.entityType === "COMPANY" && lead.name ? lead.name : `${lead.firstName || ""} ${lead.lastName || ""}`.trim())
-      : opp.title;
-    const projectData: any = {
-      opportunityId: opp.id,
-      companyId,
-      clientName,
-      sopralluogoFatto: opp.sopralluogoFatto ?? false,
-      stageId: firstStageId,
-    };
-    if (opp.siteAddress) projectData.siteAddress = opp.siteAddress;
-    if (opp.siteCity) projectData.siteCity = opp.siteCity;
-    if (opp.siteProvince) projectData.siteProvince = opp.siteProvince;
-    if (opp.siteZip) projectData.siteZip = opp.siteZip;
-    if (opp.estimatedStartDate) projectData.estimatedStartDate = new Date(opp.estimatedStartDate);
-    if (opp.estimatedEndDate) projectData.estimatedEndDate = new Date(opp.estimatedEndDate);
-    const project = await storage.createProject(projectData);
-    res.status(201).json({ message: "Progetto creato", project });
-  } catch (error) {
-    console.error("Error creating project for opportunity:", error);
-    res.status(500).json({ message: "Errore nella creazione del progetto" });
-  }
-});
-
 // GET /api/opportunities/:id/site-details - Scheda Cantiere da opportunità
 opportunitiesRouter.get("/opportunities/:id/site-details", isAuthenticated, async (req, res) => {
   try {
@@ -995,22 +792,6 @@ opportunitiesRouter.get("/opportunities/:id/site-details", isAuthenticated, asyn
         estimatedStartDate: opportunity.estimatedStartDate,
         estimatedEndDate: opportunity.estimatedEndDate,
         sopralluogoFatto: opportunity.sopralluogoFatto,
-        ponteggioPerArray: opportunity.ponteggioPerArray,
-        gruCantiere: opportunity.gruCantiere,
-        luciSegnalazione: opportunity.luciSegnalazione,
-        aCaricoClienteArray: opportunity.aCaricoClienteArray,
-        orariLavoro: opportunity.orariLavoro,
-        ancoraggi: opportunity.ancoraggi,
-        maestranze: opportunity.maestranze,
-        montacarichi: opportunity.montacarichi,
-        transpallet: opportunity.transpallet,
-        posizCamion: opportunity.posizCamion,
-        puoScaricare: opportunity.puoScaricare,
-        luogoScarico: opportunity.luogoScarico,
-        ritiroEsubero: opportunity.ritiroEsubero,
-        cartelliStradali: (opportunity as any).cartelliStradali,
-        permessiViabilita: (opportunity as any).permessiViabilita,
-        permessoSosta: (opportunity as any).permessoSosta,
       },
       lead: lead ? {
         id: lead.id,

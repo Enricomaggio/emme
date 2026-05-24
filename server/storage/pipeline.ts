@@ -1,6 +1,6 @@
 import {
   pipelineStages, opportunities, activityLogs, users,
-  projects, projectTasks, dailyAssignments, quotes, quoteItems, reminders,
+  quotes, quoteItems, reminders,
   type PipelineStage, type InsertPipelineStage,
   type Opportunity, type InsertOpportunity,
   type ActivityLog, type InsertActivityLog,
@@ -141,19 +141,6 @@ export const pipelineStorage = {
   },
 
   async deleteOpportunity(id: string, companyId: string): Promise<boolean> {
-    const relatedProjects = await db.select({ id: projects.id }).from(projects)
-      .where(and(eq(projects.opportunityId, id), eq(projects.companyId, companyId)));
-
-    for (const proj of relatedProjects) {
-      await db.delete(dailyAssignments)
-        .where(and(eq(dailyAssignments.projectId, proj.id), eq(dailyAssignments.companyId, companyId)));
-      await db.delete(projectTasks)
-        .where(and(eq(projectTasks.projectId, proj.id), eq(projectTasks.companyId, companyId)));
-    }
-
-    await db.delete(projects)
-      .where(and(eq(projects.opportunityId, id), eq(projects.companyId, companyId)));
-
     const relatedQuotes = await db.select({ id: quotes.id }).from(quotes)
       .where(and(eq(quotes.opportunityId, id), eq(quotes.companyId, companyId)));
 

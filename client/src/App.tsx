@@ -65,11 +65,7 @@ import TeamPage from "@/pages/team";
 import AdminPage from "@/pages/admin";
 import CatalogPage from "@/pages/catalog";
 import QuoteEditorPage from "@/pages/quote-editor";
-import ProgettiPage from "@/pages/progetti";
-import GanttPage from "@/pages/gantt";
-import ProxitPage from "@/pages/proxit";
 import MappaPage from "@/pages/mappa";
-import SalPage from "@/pages/sal";
 import ResetPasswordPage from "@/pages/reset-password";
 import CantieriPage from "@/pages/cantieri";
 import CreateWorkOrderPage from "@/pages/create-work-order";
@@ -210,24 +206,6 @@ function AppRouter() {
       </Route>
       <Route path="/catalog">
         <ProtectedRoute component={CatalogPage} />
-      </Route>
-      <Route path="/progetti">
-        {APP_CONFIG.moduleProgetti
-          ? <RoleProtectedRoute component={ProgettiPage} allowedRoles={["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"]} />
-          : <Redirect to="/dashboard" />}
-      </Route>
-      <Route path="/progetti/:projectId/gantt">
-        {APP_CONFIG.moduleProgetti
-          ? <RoleProtectedRoute component={GanttPage} allowedRoles={["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"]} />
-          : <Redirect to="/dashboard" />}
-      </Route>
-      <Route path="/proxit">
-        <RoleProtectedRoute component={ProxitPage} allowedRoles={["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"]} />
-      </Route>
-      <Route path="/sal">
-        {APP_CONFIG.moduleSAL
-          ? <RoleProtectedRoute component={SalPage} allowedRoles={["SUPER_ADMIN", "COMPANY_ADMIN", "TECHNICIAN"]} />
-          : <Redirect to="/dashboard" />}
       </Route>
       <Route path="/cantieri/:opportunityId/nuova-nl">
         <ProtectedRoute component={CreateWorkOrderPage} />

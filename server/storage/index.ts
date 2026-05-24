@@ -9,8 +9,6 @@ import { pipelineStorage } from "./pipeline";
 import { usersStorage } from "./users";
 import { catalogStorage } from "./catalog";
 import { quotesStorage } from "./quotes";
-import { projectsStorage } from "./projects";
-import { workforceStorage } from "./workforce";
 import { settingsStorage } from "./settings";
 import { notificationsStorage } from "./notifications";
 import { analyticsStorage } from "./analytics";
@@ -28,8 +26,6 @@ export const storage = {
   ...usersStorage,
   ...catalogStorage,
   ...quotesStorage,
-  ...projectsStorage,
-  ...workforceStorage,
   ...settingsStorage,
   ...notificationsStorage,
   ...analyticsStorage,

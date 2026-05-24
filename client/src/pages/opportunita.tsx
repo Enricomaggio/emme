@@ -54,7 +54,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Target, GripVertical, User, Trash2, MapPin, Copy, Building2, Briefcase, ExternalLink, Calculator, FileText, Eye, BellRing, Bell, Pencil, Settings, ArrowUp, ArrowDown, X, Camera, Video, Loader2, ClipboardCheck, AlertTriangle, Calendar, HardHat, Truck, Euro, Phone, Mail, Search, StickyNote, ChevronLeft, ChevronRight, Info, MoreHorizontal, ChevronDown, Send } from "lucide-react";
+import { Plus, Target, GripVertical, User, Trash2, MapPin, Copy, Building2, Briefcase, ExternalLink, Calculator, FileText, Eye, BellRing, Bell, Pencil, Settings, ArrowUp, ArrowDown, X, Camera, Video, Loader2, ClipboardCheck, AlertTriangle, Calendar, Euro, Phone, Mail, Search, StickyNote, ChevronLeft, ChevronRight, Info, MoreHorizontal, ChevronDown, Send } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,7 +65,7 @@ import {
 import { ReminderModal } from "@/components/reminder-modal";
 import { NotaLavoriModal } from "@/components/nota-lavori-modal";
 import { formatCurrency } from "@/lib/formatCurrency";
-import type { Opportunity, Lead, PipelineStage, ContactReferent, LostReason, SiteQuality, QuoteStatus, Worker, QuoteDiscounts } from "@shared/schema";
+import type { Opportunity, Lead, PipelineStage, ContactReferent, LostReason, SiteQuality, QuoteStatus, QuoteDiscounts } from "@shared/schema";
 import { lostReasonEnum, siteQualityEnum } from "@shared/schema";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -165,47 +165,6 @@ const PRESET_COLORS = [
   "#6366F1", "#14B8A6", "#E11D48", "#A855F7", "#0EA5E9",
 ];
 
-const ponteggioPerLabels: Record<string, string> = {
-  FACCIATA: "Facciata", TETTO: "Tetto", DEMOLIZIONE: "Demolizione", RISTRUTTURAZIONE: "Ristrutt. interna",
-  MANUTENZIONE: "Manutenzione", COPERTURA: "Copertura", IMPERMEABILIZZAZIONE: "Impermeabilizzazione",
-  CAPPOTTO: "Cappotto termico", PITTURA: "Pittura", NUOVA_COSTR: "Nuova costruzione", TERRAZZE: "Terrazze",
-  CANNE_FUMARIE: "Canne fumarie", GRONDAIE: "Grondaie", PIANO_CARICO: "Piano di carico",
-  CASTELLO_RISALITA: "Castello di risalita", FINESTRE_SCURI: "Finestre/scuri", ALTRO: "Altro",
-};
-const siNoLabels: Record<string, string> = { NO: "No", SI_NOSTRO: "Sì (nostro)", SI_CLIENTE: "Sì (del cliente)" };
-const gruLabels = siNoLabels;
-const transpalletLabels = siNoLabels;
-const luciSegnalazioneLabels = siNoLabels;
-const cartelliStradaliLabels = siNoLabels;
-const permessiViabilitaLabels = siNoLabels;
-const permessoSostaLabels = siNoLabels;
-const posizCamionLabels: Record<string, string> = { FUORI: "Fuori dal cantiere", DENTRO: "Dentro al cantiere" };
-const puoScaricarLabels: Record<string, string> = { DURANTE_LAVORI: "Durante i lavori", SENZA_SQUADRA: "Senza squadra", ORARI_PRECISI: "Orari precisi", NESSUN_LIMITE: "Nessun limite" };
-const luogoScaricoLabels: Record<string, string> = { AREA_CANTIERE: "Area cantiere", IN_STRADA: "In strada", MARCIAPIEDE: "Marciapiede", CORTILE: "Cortile", PARCHEGGIO: "Parcheggio" };
-const anchoringLabels: Record<string, string> = {
-  OCCHIOLI_CORTI: "Occhioli corti", OCCHIOLI_CAPPOTTO_X: "Occhioli cappotto da ?",
-  OCCHIOLI_CAPPOTTO_5: "Occhioli cappotto da 5", OCCHIOLI_CAPPOTTO_8: "Occhioli cappotto da 8",
-  OCCHIOLI_CAPPOTTO_10: "Occhioli cappotto da 10", OCCHIOLI_CAPPOTTO_12: "Occhioli cappotto da 12",
-  OCCHIOLI_CAPPOTTO_15: "Occhioli cappotto da 15", OCCHIOLI_CAPPOTTO_18: "Occhioli cappotto da 18",
-  OCCHIOLI_CAPPOTTO_20: "Occhioli cappotto da 20", OCCHIOLI_CAPPOTTO_22: "Occhioli cappotto da 22",
-  OCCHIOLI_CAPPOTTO_25: "Occhioli cappotto da 25", SPINTE: "Spinte", A_CRAVATTA: "A cravatta",
-  ZAVORRE: "Zavorre", PUNTONI: "Puntoni", NO_ANCORAGGI: "No ancoraggi", VARIABILE: "Variabile", ALTRO: "Altro",
-};
-const maestranzeLabels: Record<string, string> = {
-  SOLO_DIPENDENTI: "Solo dipendenti", DIPENDENTI_PERM: "Dipendenti con perm.",
-  DIPENDENTI_ARTIGIANI: "Dipendenti e artigiani", DIP_ART_PERM: "Dip. e Art. con perm.",
-  PARTNERS: "Partners", DA_VERIFICARE: "Da verificare",
-};
-const orariLabels: Record<string, string> = {
-  STANDARD: "Standard", ORARI_PRESTABILITI: "Orari prestabiliti", SOLO_FESTIVI: "Solo festivi",
-  NO_MERCATO: "No quando c'è mercato", NO_SABATO: "No sabato", DA_VERIFICARE: "Da verificare",
-};
-const aCaricoLabels: Record<string, string> = {
-  RIMOZ_PENSILINE: "Rimoz. pensiline", RIMOZ_TENDE: "Rimoz. tende", PUNTELLAMENTI: "Puntellamenti",
-  ISOLAMENTO_CAVI: "Isolamento cavi", PERM_OCCUPAZIONE: "Perm. di occupazione", LEGNAME: "Legname",
-  ASSITO: "Assito", PARAPETTI_TETTO: "Parapetti tetto", APERTURA_RETI: "Apertura reti giardini", ALTRO: "Altro",
-};
-
 function SchedaInfoRow({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
   return (
@@ -247,7 +206,6 @@ function OpportunitySchedaCantiereModal({
   const quote = data?.quote;
   const quoteItems = data?.quoteItems || [];
   const globalParams = quote?.globalParams as any;
-  const montacarichi = opp?.montacarichi as any;
   const transportInfo = data?.transportInfo || [];
   const pdfData = quote?.pdfData as any;
 
@@ -421,46 +379,6 @@ function OpportunitySchedaCantiereModal({
                     <p className="text-xs text-muted-foreground whitespace-pre-wrap">{opp.description}</p>
                   </div>
                 )}
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <SchedaSectionHeader title="Ponteggio" icon={HardHat} />
-                  {opp?.ponteggioPerArray && opp.ponteggioPerArray.length > 0 && (
-                    <SchedaInfoRow label="Ponteggio per" value={opp.ponteggioPerArray.map((p: string) => ponteggioPerLabels[p] || p).join(", ")} />
-                  )}
-                  <SchedaInfoRow label="Gru cantiere" value={opp?.gruCantiere ? gruLabels[opp.gruCantiere] || opp.gruCantiere : null} />
-                  <SchedaInfoRow label="Luci segnalazione" value={opp?.luciSegnalazione ? luciSegnalazioneLabels[opp.luciSegnalazione] || opp.luciSegnalazione : null} />
-                  <SchedaInfoRow label="Ancoraggi" value={opp?.ancoraggi ? anchoringLabels[opp.ancoraggi] || opp.ancoraggi : null} />
-                  <SchedaInfoRow label="Maestranze" value={opp?.maestranze ? maestranzeLabels[opp.maestranze] || opp.maestranze : null} />
-                  <SchedaInfoRow label="Orari lavoro" value={opp?.orariLavoro ? orariLabels[opp.orariLavoro] || opp.orariLavoro : null} />
-                  {opp?.aCaricoClienteArray && opp.aCaricoClienteArray.length > 0 && (
-                    <SchedaInfoRow label="A carico cliente" value={opp.aCaricoClienteArray.map((a: string) => aCaricoLabels[a] || a).join(", ")} />
-                  )}
-                  {montacarichi && (montacarichi.tipologia || montacarichi.altezzaMt) && (
-                    <div className="mt-1 p-1.5 rounded bg-muted/30 border">
-                      <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">Montacarichi</p>
-                      <SchedaInfoRow label="Tipologia" value={montacarichi.tipologia} />
-                      <SchedaInfoRow label="Altezza" value={montacarichi.altezzaMt ? `${montacarichi.altezzaMt} m` : null} />
-                      <SchedaInfoRow label="N. sbarchi" value={montacarichi.numeroSbarchi?.toString()} />
-                      <SchedaInfoRow label="Tipo sbarchi" value={montacarichi.tipoSbarchi} />
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <SchedaSectionHeader title="Trasporti" icon={Truck} />
-                  <SchedaInfoRow label="Transpallet" value={opp?.transpallet ? transpalletLabels[opp.transpallet] || opp.transpallet : null} />
-                  <SchedaInfoRow label="Posiz. camion" value={opp?.posizCamion ? posizCamionLabels[opp.posizCamion] || opp.posizCamion : null} />
-                  <SchedaInfoRow label="Può scaricare" value={opp?.puoScaricare ? puoScaricarLabels[opp.puoScaricare] || opp.puoScaricare : null} />
-                  {opp?.luogoScarico && opp.luogoScarico.length > 0 && (
-                    <SchedaInfoRow label="Luogo scarico" value={opp.luogoScarico.map((l: string) => luogoScaricoLabels[l] || l).join(", ")} />
-                  )}
-                  <SchedaInfoRow label="Ritiro esubero" value={opp?.ritiroEsubero != null ? (opp.ritiroEsubero ? "Sì" : "No") : null} />
-                  <SchedaInfoRow label="Cartelli stradali" value={opp?.cartelliStradali ? cartelliStradaliLabels[opp.cartelliStradali] || opp.cartelliStradali : null} />
-                  <SchedaInfoRow label="Permessi viabilità" value={opp?.permessiViabilita ? permessiViabilitaLabels[opp.permessiViabilita] || opp.permessiViabilita : null} />
-                  <SchedaInfoRow label="Permesso sosta" value={opp?.permessoSosta ? permessoSostaLabels[opp.permessoSosta] || opp.permessoSosta : null} />
-                </div>
               </div>
 
               <div>
@@ -1307,12 +1225,6 @@ export default function OpportunitaPage() {
     [activeManualReminderOpportunityIds]
   );
 
-  const { data: externalWorkers = [] } = useQuery<Worker[]>({
-    queryKey: ["/api/workers"],
-    select: (data) => data.filter((w) => w.isInternal === false && w.isActive),
-  });
-
-  const [showSquadreInfoDialog, setShowSquadreInfoDialog] = useState(false);
   const [isNotaLavoriOpen, setIsNotaLavoriOpen] = useState(false);
 
   const { data: referents = [] } = useQuery<ContactReferent[]>({
@@ -2320,17 +2232,6 @@ export default function OpportunitaPage() {
                                   data-testid="checkbox-squadra-in-zona"
                                 />
                                 Squadra in zona
-                                {externalWorkers.length > 0 && (
-                                  <button
-                                    type="button"
-                                    className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-muted hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-                                    onClick={(e) => { e.preventDefault(); setShowSquadreInfoDialog(true); }}
-                                    title="Vedi città squadre esterne"
-                                    data-testid="button-info-squadre-esterne"
-                                  >
-                                    <Info className="w-3 h-3" />
-                                  </button>
-                                )}
                               </FormLabel>
                               {field.value && field.value !== "0" ? (
                                 <div className="flex items-center gap-2">
@@ -3351,32 +3252,6 @@ export default function OpportunitaPage() {
       <WinCelebration show={showWinCelebration} onClose={() => setShowWinCelebration(false)} />
       {CreateConfirmCloseDialog}
       {EditConfirmCloseDialog}
-
-      <Dialog open={showSquadreInfoDialog} onOpenChange={setShowSquadreInfoDialog}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MapPin className="w-4 h-4" />
-              Squadre esterne — Città
-            </DialogTitle>
-            <DialogDescription>
-              Elenco dei capisquadra esterni e la loro città di residenza.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5 max-h-64 overflow-y-auto">
-            {externalWorkers.filter(w => w.isCaposquadra).length === 0 && (
-              <p className="text-sm text-muted-foreground" data-testid="text-no-external-squads">Nessun caposquadra esterno configurato.</p>
-            )}
-            {externalWorkers.filter(w => w.isCaposquadra).map((w) => (
-              <div key={w.id} className="flex items-center gap-2 px-2 py-1.5 rounded border text-sm" data-testid={`row-external-squad-${w.id}`}>
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: w.color }} />
-                <span className="font-medium flex-1 truncate">{w.name}</span>
-                <span className="text-muted-foreground text-xs shrink-0">{w.city || "—"}</span>
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 }

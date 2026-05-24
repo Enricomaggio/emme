@@ -61,7 +61,7 @@ import {
 } from "lucide-react";
 import type { 
   Lead, Opportunity, PipelineStage, ActivityLog, ContactType, 
-  EntityType, ContactSource, ContactReferent, CreditsafeReport, PaymentMethod, LeadSource, LostReason, Worker 
+  EntityType, ContactSource, ContactReferent, CreditsafeReport, PaymentMethod, LeadSource, LostReason
 } from "@shared/schema";
 import { entityTypeEnum, lostReasonEnum } from "@shared/schema";
 import { format } from "date-fns";
@@ -514,13 +514,6 @@ export default function LeadDetailPage() {
     queryKey: ["/api/leads", leadId, "related-notes"],
     enabled: !!leadId,
   });
-
-  const { data: externalWorkers = [] } = useQuery<Worker[]>({
-    queryKey: ["/api/workers"],
-    select: (data) => data.filter((w) => w.isInternal === false && w.isActive),
-  });
-
-  const [showSquadreInfoDialog, setShowSquadreInfoDialog] = useState(false);
 
   const { data: creditsafeData, isLoading: isLoadingCreditsafe, refetch: refetchCreditsafe } = useQuery<{ report: CreditsafeReport | null }>({
     queryKey: ["/api/creditsafe/report", leadId],
@@ -2673,17 +2666,6 @@ export default function LeadDetailPage() {
                                 data-testid="checkbox-opportunity-squadra-in-zona"
                               />
                               Squadra in zona
-                              {externalWorkers.length > 0 && (
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-muted hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-                                  onClick={(e) => { e.preventDefault(); setShowSquadreInfoDialog(true); }}
-                                  title="Vedi città squadre esterne"
-                                  data-testid="button-opportunity-info-squadre-esterne"
-                                >
-                                  <Info className="w-3 h-3" />
-                                </button>
-                              )}
                             </FormLabel>
                             {field.value && field.value !== "0" && (
                               <div className="flex items-center gap-2">
@@ -3051,32 +3033,6 @@ export default function LeadDetailPage() {
       {ReferentConfirmCloseDialog}
       {PaymentConfirmCloseDialog}
       {SourceConfirmCloseDialog}
-
-      <Dialog open={showSquadreInfoDialog} onOpenChange={setShowSquadreInfoDialog}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MapPin className="w-4 h-4" />
-              Squadre esterne — Città
-            </DialogTitle>
-            <DialogDescription>
-              Elenco dei capisquadra esterni e la loro città di residenza.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5 max-h-64 overflow-y-auto">
-            {externalWorkers.filter(w => w.isCaposquadra).length === 0 && (
-              <p className="text-sm text-muted-foreground" data-testid="text-no-external-squads">Nessun caposquadra esterno configurato.</p>
-            )}
-            {externalWorkers.filter(w => w.isCaposquadra).map((w) => (
-              <div key={w.id} className="flex items-center gap-2 px-2 py-1.5 rounded border text-sm" data-testid={`row-external-squad-${w.id}`}>
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: w.color }} />
-                <span className="font-medium flex-1 truncate">{w.name}</span>
-                <span className="text-muted-foreground text-xs shrink-0">{w.city || "—"}</span>
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 }

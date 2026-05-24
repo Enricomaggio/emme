@@ -167,7 +167,7 @@ export default function ResetPasswordPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src="/logo-ponteggi.png" alt={APP_CONFIG.appName} className="h-12 object-contain" />
+            <img src="/gdm-logo.png" alt={APP_CONFIG.appName} className="h-12 object-contain" />
           </div>
           <CardTitle className="flex items-center justify-center gap-2">
             <KeyRound className="w-5 h-5" />

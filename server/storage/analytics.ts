@@ -1,10 +1,9 @@
 import {
-  opportunities, salesTargets, warehouseBalances,
+  opportunities, salesTargets,
   type SalesTarget, type InsertSalesTarget,
-  type WarehouseBalance,
 } from "@shared/schema";
 import { db } from "../db";
-import { eq, and, gte, lte, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, gte, lte, isNotNull } from "drizzle-orm";
 
 export const analyticsStorage = {
   async getWonByMonth(
@@ -102,41 +101,4 @@ export const analyticsStorage = {
     }
   },
 
-  // ============ Warehouse Balances ============
-
-  async getWarehouseBalances(companyId: string): Promise<WarehouseBalance[]> {
-    return db.select().from(warehouseBalances).where(eq(warehouseBalances.companyId, companyId));
-  },
-
-  async upsertWarehouseBalance(companyId: string, warehouseType: "VILLA" | "PL" | "EP", date: Date | null, value: number): Promise<WarehouseBalance> {
-    const existing = await db.select().from(warehouseBalances).where(
-      and(
-        eq(warehouseBalances.companyId, companyId),
-        eq(warehouseBalances.warehouseType, warehouseType),
-        date === null ? isNull(warehouseBalances.date) : eq(warehouseBalances.date, date)
-      )
-    );
-    if (existing.length > 0) {
-      const [updated] = await db.update(warehouseBalances)
-        .set({ value: value.toString() })
-        .where(eq(warehouseBalances.id, existing[0].id))
-        .returning();
-      return updated;
-    } else {
-      const [created] = await db.insert(warehouseBalances)
-        .values({ companyId, warehouseType, date, value: value.toString() })
-        .returning();
-      return created;
-    }
-  },
-
-  async deleteWarehouseBalance(companyId: string, warehouseType: "VILLA" | "PL" | "EP", date: Date | null): Promise<void> {
-    await db.delete(warehouseBalances).where(
-      and(
-        eq(warehouseBalances.companyId, companyId),
-        eq(warehouseBalances.warehouseType, warehouseType),
-        date === null ? isNull(warehouseBalances.date) : eq(warehouseBalances.date, date)
-      )
-    );
-  },
 };

@@ -228,7 +228,6 @@ notificationsRouter.get("/map/opportunities", isAuthenticated, async (req, res) 
         leadId: o.leadId,
         assignedToUserId: o.assignedToUserId,
         value: o.value,
-        ritiroEsubero: o.ritiroEsubero,
         sopralluogoFatto: o.sopralluogoFatto,
         mapsLink: o.mapsLink,
         estimatedStartDate: o.estimatedStartDate,
