@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -52,23 +52,24 @@ export default function WorkOrderDetailPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: wo, isLoading } = useQuery<WorkOrderWithItems>({
+  const { data: wo, isLoading, error } = useQuery<WorkOrderWithItems>({
     queryKey: ["/api/work-orders", id],
     enabled: !!id,
+    retry: 1,
   });
 
   const [subject, setSubject] = useState("");
   const [notes, setNotes]     = useState("");
-  const [initialized, setInitialized] = useState(false);
 
-  // Inizializza form una sola volta quando arriva la WO
-  if (wo && !initialized) {
-    setSubject(wo.subject ?? "");
-    setNotes(wo.notes ?? "");
-    setInitialized(true);
-  }
+  // Inizializza form quando la WO arriva dal server
+  useEffect(() => {
+    if (wo) {
+      setSubject(wo.subject ?? "");
+      setNotes(wo.notes ?? "");
+    }
+  }, [wo]);
 
-  const isReadOnly = wo?.status === "CONFIRMED";
+  const isReadOnly = (wo?.status ?? "") === "CONFIRMED";
 
   // Salva oggetto + note
   const saveMutation = useMutation({
@@ -142,6 +143,27 @@ export default function WorkOrderDetailPage() {
           <div className="flex items-center gap-2 text-muted-foreground py-8">
             <Loader2 className="h-5 w-5 animate-spin" />
             <span>Caricamento...</span>
+          </div>
+        )}
+
+        {/* Errore fetch */}
+        {!isLoading && error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 space-y-3">
+            <p className="font-medium text-destructive">Impossibile caricare la Nota Lavori</p>
+            <p className="text-sm text-muted-foreground">{(error as Error).message}</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.href = "/cantieri"}>
+              Torna ai Cantieri
+            </Button>
+          </div>
+        )}
+
+        {/* Non trovata (nessun errore ma wo undefined) */}
+        {!isLoading && !error && !wo && (
+          <div className="rounded-lg border p-6 text-center space-y-3">
+            <p className="text-muted-foreground">Nota Lavori non trovata.</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.href = "/cantieri"}>
+              Torna ai Cantieri
+            </Button>
           </div>
         )}
 

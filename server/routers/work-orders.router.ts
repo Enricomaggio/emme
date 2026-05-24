@@ -26,7 +26,9 @@ workOrdersRouter.get("/work-orders", isAuthenticated, async (req: any, res) => {
     }
 
     const wos = await storage.getWorkOrdersByOpportunity(opportunityId, userCtx.companyId);
-    res.json(wos);
+    // Il nota-lavori-modal si aspetta un singolo oggetto o null (non un array).
+    // Restituiamo l'ultima NL creata, o null se non ne esistono.
+    res.json(wos.length > 0 ? wos[wos.length - 1] : null);
   } catch (e) {
     console.error("[work-orders] GET error:", e);
     res.status(500).json({ error: "Errore interno" });
