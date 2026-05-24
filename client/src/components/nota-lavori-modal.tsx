@@ -62,6 +62,9 @@ function fmtEuro(n: string | number | null | undefined): string {
 }
 
 function woToLocalItems(wo: WorkOrderWithItems): LocalItem[] {
+  // Guardia difensiva: items potrebbe essere undefined se il dato in cache
+  // è stale o in un formato inatteso (es. array legacy).
+  if (!wo?.items) return [];
   return wo.items.map((it, i) => ({
     _key: newKey(),
     description: it.description,
@@ -86,7 +89,14 @@ export function NotaLavoriModal({
     queryKey: ["/api/work-orders", { opportunityId }],
     queryFn: () =>
       apiRequest("GET", `/api/work-orders?opportunityId=${opportunityId}`).then(
-        (r) => r.json()
+        async (r) => {
+          const data = await r.json();
+          // Il backend restituisce un singolo WO o null.
+          // Se per qualsiasi motivo arrivasse un array (cache stale),
+          // prendiamo l'ultimo elemento o null.
+          if (Array.isArray(data)) return data.length > 0 ? data[data.length - 1] : null;
+          return data as WorkOrderWithItems | null;
+        }
       ),
     enabled: open,
   });
