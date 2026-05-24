@@ -197,14 +197,14 @@ function SuperbillFattureTab({ leadId }: { leadId: string }) {
 
   const statoFatturaConfig: Record<string, { label: string; className: string }> = {
     INVIATA_SDI: { label: "Inviata SDI", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-    PAGATA: { label: "Pagata", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+    PAGATA: { label: "Pagata", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
     BOZZA: { label: "Bozza", className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" },
   };
 
   const statoPagamentoConfig: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
     IN_SCADENZA: {
       label: "In scadenza",
-      className: "text-orange-600 dark:text-orange-400",
+      className: "text-amber-600 dark:text-amber-400",
       icon: <AlertCircle className="w-3.5 h-3.5" />,
     },
     SCADUTA: {
@@ -214,7 +214,7 @@ function SuperbillFattureTab({ leadId }: { leadId: string }) {
     },
     PAGATA: {
       label: "Pagata",
-      className: "text-green-600 dark:text-green-400",
+      className: "text-emerald-600 dark:text-emerald-400",
       icon: <CheckCircle2 className="w-3.5 h-3.5" />,
     },
   };
@@ -309,7 +309,7 @@ function SuperbillFattureTab({ leadId }: { leadId: string }) {
                       <TableCell>
                         <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded ${
                           f.metodoPagamento === "RIBA"
-                            ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                             : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
                         }`}>
                           {f.metodoPagamento}
@@ -1059,7 +1059,7 @@ export default function LeadDetailPage() {
   const reliabilityBgClass = reliabilityValue === "NON_AFFIDABILE"
     ? "bg-red-50 dark:bg-red-950/30"
     : reliabilityValue === "POCO_AFFIDABILE"
-      ? "bg-orange-50 dark:bg-orange-950/30"
+      ? "bg-amber-50 dark:bg-amber-950/30"
       : "";
 
   return (
@@ -1072,7 +1072,7 @@ export default function LeadDetailPage() {
           </div>
         )}
         {reliabilityValue === "POCO_AFFIDABILE" && (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-md bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 text-sm font-medium" data-testid="reliability-warning">
+          <div className="flex items-center gap-2 px-4 py-2 rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 text-sm font-medium" data-testid="reliability-warning">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             Cliente Poco Affidabile
           </div>
@@ -2101,7 +2101,7 @@ export default function LeadDetailPage() {
                       const getActivityColor = () => {
                         switch (activity.action) {
                           case "created":
-                            return "bg-green-500";
+                            return "bg-emerald-500";
                           case "updated":
                             return "bg-blue-500";
                           case "deleted":

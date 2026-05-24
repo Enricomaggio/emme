@@ -22,7 +22,7 @@ const statusConfig: Record<LeadStatus, { label: string; className: string }> = {
   },
   chiuso: {
     label: "Chiuso",
-    className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800",
+    className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
   },
 };
 
@@ -41,7 +41,7 @@ export function LeadStatusBadge({ status, className }: LeadStatusBadgeProps) {
           status === "nuovo" && "bg-blue-500",
           status === "contattato" && "bg-amber-500",
           status === "opportunita" && "bg-purple-500",
-          status === "chiuso" && "bg-green-500"
+          status === "chiuso" && "bg-emerald-500"
         )} />
         {config.label}
       </span>

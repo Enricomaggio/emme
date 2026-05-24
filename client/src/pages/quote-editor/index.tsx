@@ -1037,11 +1037,11 @@ export default function QuoteEditorPage() {
                       <div className="flex flex-col gap-1">
                         <div className="text-xs text-muted-foreground">Vs. bozza interna</div>
                         {isBalanced ? (
-                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-100 border-0 w-fit" data-testid="badge-balanced">
+                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100 border-0 w-fit" data-testid="badge-balanced">
                             ✓ Bilanciato
                           </Badge>
                         ) : (
-                          <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-100 border-0 w-fit" data-testid="badge-diff">
+                          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100 border-0 w-fit" data-testid="badge-diff">
                             Δ € {formatEur(Math.abs(clientTotalAmount - totalAfterDiscount))}
                           </Badge>
                         )}

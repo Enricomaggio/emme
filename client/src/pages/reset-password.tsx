@@ -151,7 +151,7 @@ export default function ResetPasswordPage() {
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardContent className="flex flex-col items-center gap-4 pt-6">
-            <CheckCircle className="w-12 h-12 text-green-500" />
+            <CheckCircle className="w-12 h-12 text-emerald-500" />
             <p className="text-center font-medium">Password aggiornata con successo!</p>
             <p className="text-center text-muted-foreground text-sm">
               Verrai reindirizzato alla pagina di login...

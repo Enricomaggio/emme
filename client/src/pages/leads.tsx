@@ -1193,7 +1193,7 @@ export default function LeadsPage() {
                     const relRowClass = rel === "NON_AFFIDABILE"
                       ? "bg-red-50 dark:bg-red-950/30"
                       : rel === "POCO_AFFIDABILE"
-                        ? "bg-orange-50 dark:bg-orange-950/30"
+                        ? "bg-amber-50 dark:bg-amber-950/30"
                         : "";
                     return (
                     <TableRow 
@@ -1217,7 +1217,7 @@ export default function LeadsPage() {
                               <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
                             )}
                             {rel === "POCO_AFFIDABILE" && (
-                              <AlertTriangle className="w-3.5 h-3.5 text-orange-500" />
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
                             )}
                           </div>
                           {(lead as Lead & { entityType?: EntityType }).entityType === "COMPANY" && (lead as Lead & { name?: string }).name && (lead as any).firstReferentName && (

@@ -341,7 +341,7 @@ function OpportunitySchedaCantiereModal({
                   data-testid="badge-sopralluogo"
                   className={`p-2 rounded-lg border-2 flex items-center gap-2 ${
                     opp?.sopralluogoFatto
-                      ? "bg-green-50 border-green-400 text-green-700"
+                      ? "bg-emerald-50 border-emerald-400 text-emerald-700"
                       : "bg-red-50 border-red-400 text-red-700"
                   }`}
                 >
@@ -404,7 +404,7 @@ function OpportunitySchedaCantiereModal({
                         return (
                           <div className="flex items-center gap-1.5">
                             {discountMode && (
-                              <span className="text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded" data-testid="scheda-quote-discount-badge">
+                              <span className="text-[10px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded" data-testid="scheda-quote-discount-badge">
                                 -{discountMode === "percent" ? `${discountValue}%` : `€${formatCurrency(discountValue)}`}
                               </span>
                             )}
@@ -418,9 +418,9 @@ function OpportunitySchedaCantiereModal({
                     {/* ── Superbill CTA ── */}
                     <div className="mb-2">
                       {superbillId ? (
-                        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
-                          <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                          <span className="text-xs font-medium text-green-700 dark:text-green-400">
+                        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
                             Fattura Superbill: {superbillId}
                           </span>
                         </div>
@@ -1827,7 +1827,7 @@ export default function OpportunitaPage() {
                 const labels = { open: "Aperte", won: "Vinte", lost: "Perse" };
                 const activeClasses = {
                   open: "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700",
-                  won: "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700",
+                  won: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700",
                   lost: "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700",
                 };
                 const isActive = filterStatus.has(status);
@@ -2939,7 +2939,7 @@ export default function OpportunitaPage() {
                                   return (
                                     <>
                                       {discountMode && (
-                                        <span className="text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded" data-testid={`quote-discount-badge-${quote.id}`}>
+                                        <span className="text-[10px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded" data-testid={`quote-discount-badge-${quote.id}`}>
                                           -{discountMode === "percent" ? `${discountValue}%` : `€${formatCurrency(discountValue)}`}
                                         </span>
                                       )}

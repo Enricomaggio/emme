@@ -489,16 +489,16 @@ export default function CantieriPage() {
 
         {/* Completati — collassabile */}
         <Collapsible open={completedOpen} onOpenChange={setCompletedOpen}>
-          <section className="rounded-lg border border-green-200 bg-green-50/20">
+          <section className="rounded-lg border border-emerald-200 bg-emerald-50/20">
             <CollapsibleTrigger asChild>
-              <button className="flex items-center gap-2 px-4 py-3 border-b border-green-200 w-full text-left hover:bg-green-50/30 transition-colors">
+              <button className="flex items-center gap-2 px-4 py-3 border-b border-emerald-200 w-full text-left hover:bg-emerald-50/30 transition-colors">
                 {completedOpen ? (
-                  <ChevronDown className="h-4 w-4 text-green-700" />
+                  <ChevronDown className="h-4 w-4 text-emerald-700" />
                 ) : (
-                  <ChevronRight className="h-4 w-4 text-green-700" />
+                  <ChevronRight className="h-4 w-4 text-emerald-700" />
                 )}
-                <span className="text-base font-semibold text-green-700">✅ Completati</span>
-                <Badge variant="outline" className="text-xs border-green-400 text-green-700">{completedOpps.length}</Badge>
+                <span className="text-base font-semibold text-emerald-700">✅ Completati</span>
+                <Badge variant="outline" className="text-xs border-emerald-400 text-emerald-700">{completedOpps.length}</Badge>
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent>

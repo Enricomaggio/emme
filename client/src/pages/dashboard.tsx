@@ -876,7 +876,7 @@ function QuoteStatsCard({ isLoading: _parentLoading, startDate, endDate }: { isL
     if (change === null) return null;
     if (change === 0) return <Badge variant="outline" className="text-xs px-1.5 py-0">0%</Badge>;
     if (change > 0) return (
-      <Badge className="text-xs px-1.5 py-0 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+      <Badge className="text-xs px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
         <TrendingUp className="w-3 h-3 mr-0.5" />{change}%
       </Badge>
     );
@@ -953,7 +953,7 @@ function QuoteStatsCard({ isLoading: _parentLoading, startDate, endDate }: { isL
 
             <div className="flex items-center justify-between gap-2 p-3">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                 <span className="text-sm text-muted-foreground">
                   Accettati{" "}
                   {isLoading ? null : <span className="font-medium text-foreground">({vinti.count})</span>}
@@ -1696,7 +1696,7 @@ function ProiezioneFinanziaria() {
               />
               <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 2" />
               <Bar dataKey="entrate" name="Entrate" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              <Bar dataKey="uscite" name="Uscite" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="uscite" name="Uscite" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
               <Line
                 dataKey="saldo"
                 name="Saldo"
@@ -1816,10 +1816,10 @@ function ScadenzeFinanziarie() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-lg border p-3 space-y-1">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <ArrowDownToLine className="w-3.5 h-3.5 text-green-600" />
+                  <ArrowDownToLine className="w-3.5 h-3.5 text-emerald-600" />
                   Da incassare
                 </div>
-                <p className="text-lg font-bold text-green-700 dark:text-green-400">{fmt(totaleAttive)}</p>
+                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{fmt(totaleAttive)}</p>
                 <p className="text-xs text-muted-foreground">{attiveInScadenza.length} fatture</p>
               </div>
               <div className="rounded-lg border p-3 space-y-1">
@@ -1840,12 +1840,12 @@ function ScadenzeFinanziarie() {
                 </p>
                 <p className="text-xs text-muted-foreground">{scaduteAttive.length} fatture</p>
               </div>
-              <div className={`rounded-lg border p-3 space-y-1 ${totaleScadutoPassive > 0 ? "border-orange-200 dark:border-orange-800" : ""}`}>
+              <div className={`rounded-lg border p-3 space-y-1 ${totaleScadutoPassive > 0 ? "border-amber-200 dark:border-amber-800" : ""}`}>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <AlertCircle className={`w-3.5 h-3.5 ${totaleScadutoPassive > 0 ? "text-orange-500" : "text-muted-foreground"}`} />
+                  <AlertCircle className={`w-3.5 h-3.5 ${totaleScadutoPassive > 0 ? "text-amber-500" : "text-muted-foreground"}`} />
                   Scaduto (uscite)
                 </div>
-                <p className={`text-lg font-bold ${totaleScadutoPassive > 0 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                <p className={`text-lg font-bold ${totaleScadutoPassive > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
                   {fmt(totaleScadutoPassive)}
                 </p>
                 <p className="text-xs text-muted-foreground">{scadutePassive.length} fatture</p>
@@ -1856,12 +1856,12 @@ function ScadenzeFinanziarie() {
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border p-3 space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                  <ArrowDownToLine className="w-3 h-3 text-green-600" />
+                  <ArrowDownToLine className="w-3 h-3 text-emerald-600" />
                   Entrate per metodo
                 </p>
                 <div className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
                     RIBA
                   </span>
                   <div className="text-right">
@@ -1887,7 +1887,7 @@ function ScadenzeFinanziarie() {
                 </p>
                 <div className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
                     RIBA
                   </span>
                   <div className="text-right">
@@ -1946,12 +1946,12 @@ function ScadenzeFinanziarie() {
                           isOverdue
                             ? "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20"
                             : isUrgent
-                            ? "border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20"
+                            ? "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20"
                             : "border-border bg-muted/20"
                         }`}
                       >
                         {/* Tipo badge */}
-                        <div className={`w-1.5 h-8 rounded-full shrink-0 ${s.tipo === "ATTIVA" ? "bg-green-500" : "bg-blue-500"}`} />
+                        <div className={`w-1.5 h-8 rounded-full shrink-0 ${s.tipo === "ATTIVA" ? "bg-emerald-500" : "bg-blue-500"}`} />
 
                         {/* Dati */}
                         <div className="flex-1 min-w-0">
@@ -1959,7 +1959,7 @@ function ScadenzeFinanziarie() {
                             <span className="font-mono text-xs text-muted-foreground">{s.numeroFattura}</span>
                             <span className={`text-xs px-1 py-0.5 rounded ${
                               s.metodoPagamento === "RIBA"
-                                ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                                 : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
                             }`}>
                               {s.metodoPagamento}
@@ -1973,7 +1973,7 @@ function ScadenzeFinanziarie() {
                           <p className="font-bold">{fmt(s.importo)}</p>
                           <p className={`text-xs ${
                             isOverdue ? "text-red-600 dark:text-red-400 font-medium" :
-                            isUrgent ? "text-orange-600 dark:text-orange-400" :
+                            isUrgent ? "text-amber-600 dark:text-amber-400" :
                             "text-muted-foreground"
                           }`}>
                             {isOverdue ? `Scad. ${dateLabel}` : diff === 0 ? "Oggi" : diff === 1 ? "Domani" : dateLabel}
@@ -2456,7 +2456,7 @@ function AdminDashboard({
               <div className="flex-1 min-w-0 space-y-1">
                 <div className="flex items-center justify-between py-2.5 border-b" data-testid="stat-emessi">
                   <div className="flex items-center gap-2">
-                    <Send className="w-4 h-4 text-violet-500" />
+                    <Send className="w-4 h-4 text-primary" />
                     <span className="text-sm font-semibold">Emessi</span>
                     <span className="text-xs text-muted-foreground">({emessiCount})</span>
                   </div>

@@ -69,7 +69,7 @@ const getCreditScoreColor = (score: number | null) => {
     return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300";
   if (score <= 60)
     return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
-  return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+  return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
 };
 
 function SectionHeader({
@@ -165,14 +165,14 @@ export default function CreditSafeAnalysis({
     {
       title: "Utile Netto",
       data: report.profit as { year: number; value: number }[] | null,
-      color: "bg-green-500 dark:bg-green-400",
+      color: "bg-emerald-500 dark:bg-emerald-400",
       isCurrency: true,
       canBeNegative: true,
     },
     {
       title: "Tempo Medio Pagamento",
       data: report.avgPaymentDays as { year: number; value: number }[] | null,
-      color: "bg-orange-500 dark:bg-orange-400",
+      color: "bg-amber-500 dark:bg-amber-400",
       isCurrency: false,
     },
   ];
@@ -359,7 +359,7 @@ export default function CreditSafeAnalysis({
                   className={
                     report.companyStatus.toLowerCase().includes("active") ||
                     report.companyStatus.toLowerCase().includes("attiv")
-                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+                      ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
                       : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
                   }
                   data-testid="badge-company-status"
@@ -520,7 +520,7 @@ export default function CreditSafeAnalysis({
                       let IconComp = FileText;
                       if (sentiment === "Positive") {
                         iconColor =
-                          "text-green-600 dark:text-green-400";
+                          "text-emerald-600 dark:text-emerald-400";
                         IconComp = CheckCircle;
                       } else if (sentiment === "Negative") {
                         iconColor =
@@ -579,7 +579,7 @@ export default function CreditSafeAnalysis({
                         {hasIssue ? (
                           <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
                         ) : (
-                          <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                          <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         )}
                         <span
                           className={`text-sm ${hasIssue ? "text-red-700 dark:text-red-300 font-medium" : "text-foreground"}`}
@@ -832,7 +832,7 @@ export default function CreditSafeAnalysis({
                             variant="outline"
                             className={
                               isActive
-                                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+                                ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
                                 : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
                             }
                           >

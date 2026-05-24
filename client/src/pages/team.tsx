@@ -86,8 +86,8 @@ const roleLabels: Record<string, string> = {
 const roleColors: Record<string, string> = {
   SUPER_ADMIN: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
   COMPANY_ADMIN: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  SALES_AGENT: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  TECHNICIAN: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  SALES_AGENT: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  TECHNICIAN: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
 };
 
 function EmptyState() {
@@ -507,7 +507,7 @@ export default function TeamPage() {
                         {teamUser.status === "SUSPENDED" ? (
                           <Badge variant="destructive">Sospeso</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-green-600 border-green-600">Attivo</Badge>
+                          <Badge variant="outline" className="text-emerald-600 border-emerald-600">Attivo</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
