@@ -29,6 +29,9 @@ export interface QuoteItemDraft {
   effectiveMargin?: string | null;
   // LATTONERIA: cost per kg stored at save time (€/kg)
   unitCostPerKg?: string | null;
+  // Pannello bozza/cliente
+  isInternalOnly?: boolean;
+  clientTotal?: string | null;
 }
 
 export type QuoteItemPayload =
@@ -43,6 +46,8 @@ export type QuoteItemPayload =
       materialThicknessId: string;
       materialFinishId?: string;
       developmentCm: string;
+      isInternalOnly?: boolean;
+      clientTotal?: string | null;
     }
   | {
       type: "ARTICOLO";
@@ -52,6 +57,8 @@ export type QuoteItemPayload =
       discountPercent?: string;
       overrideTotal?: string | null;
       catalogArticleId: string;
+      isInternalOnly?: boolean;
+      clientTotal?: string | null;
     }
   | {
       type: "GIORNATE";
@@ -61,6 +68,8 @@ export type QuoteItemPayload =
       discountPercent?: string;
       overrideTotal?: string | null;
       laborRateId: string;
+      isInternalOnly?: boolean;
+      clientTotal?: string | null;
     }
   | {
       type: "MANUALE";
@@ -71,6 +80,8 @@ export type QuoteItemPayload =
       marginPercent?: string;
       discountPercent?: string;
       overrideTotal?: string | null;
+      isInternalOnly?: boolean;
+      clientTotal?: string | null;
     };
 
 export interface QuoteSavePayload {
@@ -116,5 +127,7 @@ export interface QuoteResponse {
     unitPriceApplied: string;
     totalRow: string;
     displayOrder: number;
+    isInternalOnly: boolean | null;
+    clientTotal: string | null;
   }>;
 }

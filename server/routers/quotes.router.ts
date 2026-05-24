@@ -35,6 +35,8 @@ const itemBaseSchema = z.object({
   marginPercent: z.coerce.number().min(0).max(10000).optional(),
   discountPercent: z.coerce.number().min(0).max(100).optional().default(0),
   overrideTotal: z.coerce.number().min(0).nullable().optional(),
+  isInternalOnly: z.boolean().optional().default(false),
+  clientTotal: z.coerce.number().min(0).nullable().optional(),
 });
 
 const lattoneriaItemSchema = itemBaseSchema.extend({
@@ -68,6 +70,8 @@ const manualeItemSchema = z.object({
   marginPercent: z.coerce.number().min(0).max(10000).optional(),
   discountPercent: z.coerce.number().min(0).max(100).optional().default(0),
   overrideTotal: z.coerce.number().min(0).nullable().optional(),
+  isInternalOnly: z.boolean().optional().default(false),
+  clientTotal: z.coerce.number().min(0).nullable().optional(),
 });
 
 const quoteItemInputSchema = z.discriminatedUnion("type", [
@@ -118,6 +122,8 @@ interface ComputedItem {
   discountPercent: string;
   overrideTotal: string | null;
   totalRow: string;
+  isInternalOnly: boolean;
+  clientTotal: string | null;
   // FKs
   materialId: string | null;
   materialThicknessId: string | null;
@@ -191,6 +197,8 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       discountPercent: String(round2(discountPercent)),
       overrideTotal: overrideTotal != null ? String(round2(overrideTotal)) : null,
       totalRow: String(round2(totalRow)),
+      isInternalOnly: input.isInternalOnly ?? false,
+      clientTotal: input.clientTotal != null ? String(round2(input.clientTotal)) : null,
       materialId: material.id,
       materialThicknessId: thickness.id,
       materialFinishId: input.materialFinishId ?? null,
@@ -229,6 +237,8 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       discountPercent: String(round2(discountPercent)),
       overrideTotal: overrideTotal != null ? String(round2(overrideTotal)) : null,
       totalRow: String(round2(totalRow)),
+      isInternalOnly: input.isInternalOnly ?? false,
+      clientTotal: input.clientTotal != null ? String(round2(input.clientTotal)) : null,
       materialId: null,
       materialThicknessId: null,
       materialFinishId: null,
@@ -260,6 +270,8 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
       discountPercent: String(round2(discountPercent)),
       overrideTotal: overrideTotal != null ? String(round2(overrideTotal)) : null,
       totalRow: String(round2(totalRow)),
+      isInternalOnly: input.isInternalOnly ?? false,
+      clientTotal: input.clientTotal != null ? String(round2(input.clientTotal)) : null,
       materialId: null,
       materialThicknessId: null,
       materialFinishId: null,
@@ -298,6 +310,8 @@ async function computeItem(input: QuoteItemInput): Promise<ComputedItem> {
     discountPercent: String(round2(discountPercent)),
     overrideTotal: overrideTotal != null ? String(round2(overrideTotal)) : null,
     totalRow: String(round2(totalRow)),
+    isInternalOnly: input.isInternalOnly ?? false,
+    clientTotal: null, // GIORNATE mai esposto al cliente
     materialId: null,
     materialThicknessId: null,
     materialFinishId: null,
@@ -327,6 +341,8 @@ function toInsertItem(quoteId: string, computed: ComputedItem, displayOrder: num
     discountPercent: computed.discountPercent,
     overrideTotal: computed.overrideTotal,
     totalRow: computed.totalRow,
+    isInternalOnly: computed.isInternalOnly,
+    clientTotal: computed.clientTotal,
     displayOrder,
   };
 }

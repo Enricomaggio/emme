@@ -711,6 +711,11 @@ export const quoteItems = pgTable("quote_items", {
   // Override quantità per nota lavori (10% dei casi in cui differisce dal preventivo)
   workOrderQuantityOverride: numeric("work_order_quantity_override"),
 
+  // Pannello bozza/cliente: se true, la riga è solo interna (non va nel PDF cliente)
+  isInternalOnly: boolean("is_internal_only").notNull().default(false),
+  // Prezzo finale esposto al cliente (impostato manualmente o tramite spalma manodopera)
+  clientTotal: numeric("client_total", { precision: 10, scale: 2 }),
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("quote_items_quote_id_idx").on(table.quoteId),

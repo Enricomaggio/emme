@@ -16,6 +16,7 @@ import {
   Pencil,
   Send,
   CheckCircle2,
+  ArrowRightLeft,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { QuotePdfActions } from "@/pdf/QuotePdfActions";
@@ -77,6 +78,8 @@ export default function QuoteEditorPage() {
   const [editingItem, setEditingItem] = useState<QuoteItemDraft | null>(null);
   const [globalDiscountMode, setGlobalDiscountMode] = useState<"percent" | "euro">("percent");
   const [globalDiscountValue, setGlobalDiscountValue] = useState<string>("");
+  // Prezzi pannello cliente: uid → valore stringa (€)
+  const [clientPrices, setClientPrices] = useState<Record<string, string>>({});
 
   const materialsQuery = useQuery<MaterialWithThicknesses[]>({ queryKey: ["/api/materials"] });
   const articleFamiliesQuery = useQuery<ArticleFamilyWithVariants[]>({ queryKey: ["/api/article-families"] });
@@ -103,6 +106,17 @@ export default function QuoteEditorPage() {
     queryKey: ["/api/opportunities", opportunityId],
     enabled: !!opportunityId,
   });
+
+  // Estrae i prezzi cliente da una risposta server (uid → clientTotal)
+  function hydrateClientPricesFromResponse(rawItems: QuoteResponse["items"]): Record<string, string> {
+    const cp: Record<string, string> = {};
+    for (const i of rawItems) {
+      if (i.clientTotal != null && i.clientTotal !== "" && i.type !== "GIORNATE") {
+        cp[i.id] = i.clientTotal;
+      }
+    }
+    return cp;
+  }
 
   // Hydrate a raw API items array into local QuoteItemDraft[]
   function hydrateItemsFromResponse(rawItems: QuoteResponse["items"]): QuoteItemDraft[] {
@@ -175,6 +189,8 @@ export default function QuoteEditorPage() {
           totalRow: i.totalRow,
           costRow,
           effectiveMargin,
+          isInternalOnly: i.isInternalOnly ?? false,
+          clientTotal: i.clientTotal || null,
         };
       });
   }
@@ -190,6 +206,7 @@ export default function QuoteEditorPage() {
     setNotes(q.notes || "");
     setNumber(q.number);
     setItems(hydrateItemsFromResponse(q.items || []));
+    setClientPrices(hydrateClientPricesFromResponse(q.items || []));
     if (q.discounts?.globalDiscountMode) {
       setGlobalDiscountMode(q.discounts.globalDiscountMode);
       const val = q.discounts.globalDiscountMode === "percent"
@@ -233,6 +250,52 @@ export default function QuoteEditorPage() {
     return Math.max(0, totalEstimated - globalDiscountAmount);
   }, [totalEstimated, globalDiscountAmount]);
 
+  // Totale pannello cliente (somma prezzi impostati o totalRow come fallback)
+  const clientTotalAmount = useMemo(() => {
+    return items
+      .filter((it) => it.type !== "GIORNATE")
+      .reduce((sum, it) => {
+        const price = clientPrices[it.uid];
+        const val = parseFloat(price != null ? price : (it.totalRow || "0"));
+        return sum + (isFinite(val) ? val : 0);
+      }, 0);
+  }, [items, clientPrices]);
+
+  const isBalanced = Math.abs(clientTotalAmount - totalAfterDiscount) < 0.02;
+
+  // Distribuisce il costo GIORNATE proporzionalmente sui non-GIORNATE
+  function handleSpalma() {
+    const nonLaborItems = items.filter((it) => it.type !== "GIORNATE");
+    const giornateItems = items.filter((it) => it.type === "GIORNATE");
+
+    const laborTotal = giornateItems.reduce((sum, it) => sum + parseFloat(it.totalRow || "0"), 0);
+    const nonLaborBaseTotal = nonLaborItems.reduce((sum, it) => sum + parseFloat(it.totalRow || "0"), 0);
+
+    if (nonLaborItems.length === 0 || nonLaborBaseTotal <= 0) return;
+
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+
+    const newValues: string[] = nonLaborItems.map((it) => {
+      const itemTotal = parseFloat(it.totalRow || "0");
+      return String(r2(itemTotal + laborTotal * itemTotal / nonLaborBaseTotal));
+    });
+
+    // Ultimo item assorbe gli arrotondamenti
+    if (newValues.length > 0) {
+      const sumExceptLast = newValues
+        .slice(0, -1)
+        .reduce((s, p) => s + parseFloat(p), 0);
+      const lastPrice = r2(totalAfterDiscount - sumExceptLast);
+      newValues[newValues.length - 1] = String(Math.max(0, lastPrice));
+    }
+
+    const updated: Record<string, string> = {};
+    nonLaborItems.forEach((it, i) => {
+      updated[it.uid] = newValues[i];
+    });
+    setClientPrices((prev) => ({ ...prev, ...updated }));
+  }
+
   const quoteSummary = useMemo(() => {
     let totalCost = 0;
     for (const it of items) {
@@ -264,6 +327,9 @@ export default function QuoteEditorPage() {
             : undefined;
         const discount = it.discountPercent && it.discountPercent !== "0" ? it.discountPercent : undefined;
         const override = it.overrideTotal != null && it.overrideTotal !== "" ? it.overrideTotal : null;
+        // clientTotal dal pannello destra (solo non-GIORNATE)
+        const rawCp = clientPrices[it.uid];
+        const clientTotal = rawCp != null ? rawCp : null;
         if (it.type === "LATTONERIA") {
           return {
             type: "LATTONERIA",
@@ -276,6 +342,7 @@ export default function QuoteEditorPage() {
             materialThicknessId: it.materialThicknessId ?? "",
             materialFinishId: it.materialFinishId || undefined,
             developmentCm: it.developmentCm ?? "",
+            clientTotal,
           };
         }
         if (it.type === "ARTICOLO") {
@@ -287,6 +354,7 @@ export default function QuoteEditorPage() {
             discountPercent: discount,
             overrideTotal: override,
             catalogArticleId: it.catalogArticleId ?? "",
+            clientTotal,
           };
         }
         if (it.type === "MANUALE") {
@@ -299,6 +367,7 @@ export default function QuoteEditorPage() {
             marginPercent: margin,
             discountPercent: discount,
             overrideTotal: override,
+            clientTotal,
           };
         }
         return {
@@ -309,6 +378,7 @@ export default function QuoteEditorPage() {
           discountPercent: discount,
           overrideTotal: override,
           laborRateId: it.laborRateId ?? "",
+          isInternalOnly: true,
         };
       }),
     };
@@ -343,6 +413,7 @@ export default function QuoteEditorPage() {
         // panel reflects the re-computed unitCost/baseTotal (e.g. after a SINGLE-mode
         // material price change) without waiting for the query to re-fetch.
         setItems(hydrateItemsFromResponse(data.items || []));
+        setClientPrices(hydrateClientPricesFromResponse(data.items || []));
       }
     },
     onError: (err: unknown) => {
@@ -472,31 +543,52 @@ export default function QuoteEditorPage() {
       ? { mode: gdMode, value: gdVal }
       : null;
 
-    return {
-      id: q.id,
-      number: q.number,
-      subject: q.subject,
-      notes: q.notes,
-      totalAmount: q.totalAmount,
-      createdAt: q.createdAt,
-      globalDiscount,
-      items: q.items
-        .slice()
-        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-        .map((it) => ({
+    // Filtra righe interne (GIORNATE marcate isInternalOnly, o GIORNATE legacy)
+    const pdfItems = q.items
+      .filter((it) => !it.isInternalOnly && it.type !== "GIORNATE")
+      .slice()
+      .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+      .map((it) => {
+        const effectiveTotalRow = it.clientTotal != null ? it.clientTotal : it.totalRow;
+        const qty = parseFloat(it.quantity) || 1;
+        // Ricalcola unitPriceApplied coerente col prezzo cliente
+        const effectiveUnitPrice = it.clientTotal != null
+          ? String(Math.round(parseFloat(it.clientTotal) / qty * 100) / 100)
+          : it.unitPriceApplied;
+        return {
           id: it.id,
           type: it.type,
           description: it.description,
           unitOfMeasure: it.unitOfMeasure,
           developmentCm: it.developmentCm,
           quantity: it.quantity,
-          unitPriceApplied: it.unitPriceApplied,
-          totalRow: it.totalRow,
+          unitPriceApplied: effectiveUnitPrice,
+          totalRow: effectiveTotalRow,
           displayOrder: it.displayOrder,
-          discountPercent: it.discountPercent ?? null,
-          overrideTotal: it.overrideTotal ?? null,
-          baseTotal: it.baseTotal ?? null,
-        })),
+          discountPercent: it.clientTotal != null ? null : (it.discountPercent ?? null),
+          overrideTotal: it.clientTotal != null ? null : (it.overrideTotal ?? null),
+          baseTotal: it.clientTotal != null ? null : (it.baseTotal ?? null),
+        };
+      });
+
+    const pdfTotalAmount = String(
+      Math.round(pdfItems.reduce((s, it) => s + parseFloat(it.totalRow || "0"), 0) * 100) / 100
+    );
+
+    // Se i prezzi cliente sono impostati (spalma eseguito), il globalDiscount è già compreso
+    const anyHasClientTotal = q.items.some(
+      (it) => it.clientTotal != null && it.type !== "GIORNATE"
+    );
+
+    return {
+      id: q.id,
+      number: q.number,
+      subject: q.subject,
+      notes: q.notes,
+      totalAmount: pdfTotalAmount,
+      createdAt: q.createdAt,
+      globalDiscount: anyHasClientTotal ? null : globalDiscount,
+      items: pdfItems,
     };
   }
 
@@ -536,7 +628,7 @@ export default function QuoteEditorPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl space-y-4" data-testid="page-quote-editor">
+    <div className="container mx-auto px-4 py-6 max-w-7xl space-y-4" data-testid="page-quote-editor">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => window.history.back()} data-testid="button-back">
           <ArrowLeft className="w-4 h-4" />
@@ -696,214 +788,265 @@ export default function QuoteEditorPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Righe</CardTitle>
-              <Button onClick={() => setAddOpen(true)} size="sm" data-testid="button-open-add-row">
-                <Plus className="w-4 h-4 mr-2" />
-                Aggiungi riga
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {items.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-6 text-center" data-testid="empty-rows">
-                  Nessuna riga. Aggiungi la prima voce con "Aggiungi riga".
-                </div>
-              ) : (
-                <Table data-testid="table-quote-items">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[100px]">Tipo</TableHead>
-                      <TableHead className="max-w-xs">Descrizione</TableHead>
-                      <TableHead className="w-[80px] text-right">Sconto %</TableHead>
-                      <TableHead className="w-[130px] text-right whitespace-nowrap">Totale</TableHead>
-                      <TableHead className="w-[140px] text-right">Azioni</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {items.map((it, idx) => (
-                      <TableRow
-                        key={it.uid}
-                        onClick={() => setEditingItem(it)}
-                        className="cursor-pointer hover-elevate"
-                        data-testid={`row-quote-item-${it.uid}`}
-                      >
-                        <TableCell>{rowTypeBadge(it.type)}</TableCell>
-                        <TableCell className="text-sm">{rowDetails(it)}</TableCell>
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.5"
-                            value={it.discountPercent && parseFloat(it.discountPercent) > 0 ? parseFloat(it.discountPercent) : ""}
-                            placeholder="0"
-                            onChange={(e) => updateItemDiscount(it.uid, e.target.value)}
-                            data-testid={`input-discount-${it.uid}`}
-                            className="w-14 h-7 text-right text-sm rounded border border-input bg-transparent px-2 focus:outline-none focus:ring-1 focus:ring-ring"
-                          />
-                        </TableCell>
-                        <TableCell className="text-right font-medium whitespace-nowrap">
-                          {(() => {
-                            const hasDiscount = (it.discountPercent && parseFloat(it.discountPercent) > 0) || (it.overrideTotal != null && it.overrideTotal !== "");
-                            const originalTotal = it.baseTotal ? parseFloat(it.baseTotal) : null;
-                            const finalTotal = it.totalRow ? parseFloat(it.totalRow) : null;
-                            return (
-                              <div className="flex flex-col items-end gap-0.5">
-                                {hasDiscount && originalTotal != null && (
-                                  <span className="line-through text-muted-foreground text-xs" data-testid={`text-original-total-${it.uid}`}>
-                                    € {formatEur(originalTotal)}
-                                  </span>
-                                )}
-                                <span data-testid={`text-total-${it.uid}`} className={hasDiscount ? "text-amber-700 dark:text-amber-300" : ""}>
-                                  {finalTotal != null ? `€ ${formatEur(finalTotal)}` : "—"}
-                                </span>
-                                {hasDiscount && it.discountPercent && parseFloat(it.discountPercent) > 0 && it.overrideTotal == null && (
-                                  <span className="text-xs text-amber-600 dark:text-amber-400" data-testid={`badge-discount-${it.uid}`}>
-                                    -{parseFloat(it.discountPercent).toFixed(1)}%
-                                  </span>
-                                )}
-                                {it.overrideTotal != null && it.overrideTotal !== "" && (
-                                  <span className="text-xs text-amber-600 dark:text-amber-400" data-testid={`badge-override-${it.uid}`}>
-                                    manuale
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="inline-flex gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7"
-                              onClick={() => setEditingItem(it)}
-                              data-testid={`button-edit-${it.uid}`}
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7"
-                              disabled={idx === 0}
-                              onClick={() => moveItem(it.uid, -1)}
-                              data-testid={`button-move-up-${it.uid}`}
-                            >
-                              <ArrowUp className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7"
-                              disabled={idx === items.length - 1}
-                              onClick={() => moveItem(it.uid, 1)}
-                              data-testid={`button-move-down-${it.uid}`}
-                            >
-                              <ArrowDown className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-destructive"
-                              onClick={() => deleteItem(it.uid)}
-                              data-testid={`button-delete-${it.uid}`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-              {/* Global discount panel */}
-              <div className="mt-4 pt-3 border-t" data-testid="global-discount-panel">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Sconto globale</div>
-                <div className="flex items-center gap-3">
-                  <div className="inline-flex rounded-md border border-input overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setGlobalDiscountMode("percent")}
-                      data-testid="toggle-discount-percent"
-                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${globalDiscountMode === "percent" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted"}`}
-                    >
-                      %
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGlobalDiscountMode("euro")}
-                      data-testid="toggle-discount-euro"
-                      className={`px-3 py-1.5 text-sm font-medium transition-colors border-l border-input ${globalDiscountMode === "euro" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted"}`}
-                    >
-                      €
-                    </button>
-                  </div>
-                  <Input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="0"
-                    value={globalDiscountValue}
-                    onChange={(e) => setGlobalDiscountValue(e.target.value)}
-                    className="w-32"
-                    data-testid="input-global-discount"
-                  />
-                  {globalDiscountAmount > 0 && (
-                    <span className="text-sm text-amber-700 dark:text-amber-300 font-medium" data-testid="text-global-discount-amount">
-                      − € {formatEur(globalDiscountAmount)}
-                    </span>
-                  )}
-                </div>
-              </div>
+          {/* ─── Due pannelli affiancati ─── */}
+          <div className="grid grid-cols-2 gap-3">
 
-              <div className="mt-4 pt-3 border-t" data-testid="quote-summary-panel">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                  {items.length > 0 && (
-                    <div className="text-sm space-y-1" data-testid="quote-cost-summary">
-                      <div className="flex items-center gap-6">
-                        <span className="text-muted-foreground w-28">Costo totale</span>
-                        <span className="font-semibold">€ {formatEur(quoteSummary.totalCost)}</span>
-                      </div>
-                      <div className="flex items-center gap-6">
-                        <span className="text-muted-foreground w-28">Margine €</span>
-                        <span className="font-semibold">€ {formatEur(quoteSummary.totalMarginEur)}</span>
-                      </div>
-                      <div className="flex items-center gap-6">
-                        <span className="text-muted-foreground w-28">Margine %</span>
-                        <span className="font-semibold" data-testid="avg-margin-percent">{quoteSummary.avgMarginPercent.toFixed(1)}%</span>
-                      </div>
+            {/* ══════ Pannello sinistro: Bozza interna ══════ */}
+            <Card>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">Bozza interna</CardTitle>
+                  <Badge variant="secondary" className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Interna</Badge>
+                </div>
+                <Button onClick={() => setAddOpen(true)} size="sm" data-testid="button-open-add-row">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Aggiungi riga
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {items.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-6 text-center" data-testid="empty-rows">
+                    Nessuna riga. Aggiungi la prima voce con "Aggiungi riga".
+                  </div>
+                ) : (
+                  <Table data-testid="table-quote-items">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[90px]">Tipo</TableHead>
+                        <TableHead>Descrizione</TableHead>
+                        <TableHead className="w-[70px] text-right">Sc.%</TableHead>
+                        <TableHead className="w-[110px] text-right">Totale</TableHead>
+                        <TableHead className="w-[120px] text-right">Azioni</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((it, idx) => (
+                        <TableRow
+                          key={it.uid}
+                          onClick={() => setEditingItem(it)}
+                          className="cursor-pointer hover-elevate"
+                          data-testid={`row-quote-item-${it.uid}`}
+                        >
+                          <TableCell>{rowTypeBadge(it.type)}</TableCell>
+                          <TableCell className="text-xs">{rowDetails(it)}</TableCell>
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              value={it.discountPercent && parseFloat(it.discountPercent) > 0 ? parseFloat(it.discountPercent) : ""}
+                              placeholder="0"
+                              onChange={(e) => updateItemDiscount(it.uid, e.target.value)}
+                              data-testid={`input-discount-${it.uid}`}
+                              className="w-12 h-7 text-right text-sm rounded border border-input bg-transparent px-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right font-medium whitespace-nowrap">
+                            {(() => {
+                              const hasDiscount = (it.discountPercent && parseFloat(it.discountPercent) > 0) || (it.overrideTotal != null && it.overrideTotal !== "");
+                              const originalTotal = it.baseTotal ? parseFloat(it.baseTotal) : null;
+                              const finalTotal = it.totalRow ? parseFloat(it.totalRow) : null;
+                              return (
+                                <div className="flex flex-col items-end gap-0.5">
+                                  {hasDiscount && originalTotal != null && (
+                                    <span className="line-through text-muted-foreground text-xs" data-testid={`text-original-total-${it.uid}`}>
+                                      € {formatEur(originalTotal)}
+                                    </span>
+                                  )}
+                                  <span data-testid={`text-total-${it.uid}`} className={`text-sm ${hasDiscount ? "text-amber-700 dark:text-amber-300" : ""}`}>
+                                    {finalTotal != null ? `€ ${formatEur(finalTotal)}` : "—"}
+                                  </span>
+                                  {hasDiscount && it.discountPercent && parseFloat(it.discountPercent) > 0 && it.overrideTotal == null && (
+                                    <span className="text-xs text-amber-600 dark:text-amber-400" data-testid={`badge-discount-${it.uid}`}>
+                                      -{parseFloat(it.discountPercent).toFixed(1)}%
+                                    </span>
+                                  )}
+                                  {it.overrideTotal != null && it.overrideTotal !== "" && (
+                                    <span className="text-xs text-amber-600 dark:text-amber-400" data-testid={`badge-override-${it.uid}`}>
+                                      manuale
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex gap-0.5" onClick={(e) => e.stopPropagation()}>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingItem(it)} data-testid={`button-edit-${it.uid}`}>
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" disabled={idx === 0} onClick={() => moveItem(it.uid, -1)} data-testid={`button-move-up-${it.uid}`}>
+                                <ArrowUp className="w-3 h-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" disabled={idx === items.length - 1} onClick={() => moveItem(it.uid, 1)} data-testid={`button-move-down-${it.uid}`}>
+                                <ArrowDown className="w-3 h-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => deleteItem(it.uid)} data-testid={`button-delete-${it.uid}`}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+
+                {/* Sconto globale */}
+                <div className="mt-3 pt-3 border-t" data-testid="global-discount-panel">
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Sconto globale</div>
+                  <div className="flex items-center gap-2">
+                    <div className="inline-flex rounded-md border border-input overflow-hidden">
+                      <button type="button" onClick={() => setGlobalDiscountMode("percent")} data-testid="toggle-discount-percent" className={`px-2.5 py-1.5 text-sm font-medium transition-colors ${globalDiscountMode === "percent" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted"}`}>%</button>
+                      <button type="button" onClick={() => setGlobalDiscountMode("euro")} data-testid="toggle-discount-euro" className={`px-2.5 py-1.5 text-sm font-medium transition-colors border-l border-input ${globalDiscountMode === "euro" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted"}`}>€</button>
                     </div>
-                  )}
-                  <div className="text-right sm:ml-auto">
+                    <Input type="number" step="any" min="0" placeholder="0" value={globalDiscountValue} onChange={(e) => setGlobalDiscountValue(e.target.value)} className="w-28" data-testid="input-global-discount" />
                     {globalDiscountAmount > 0 && (
-                      <>
-                        <div className="text-xs text-muted-foreground">Subtotale</div>
-                        <div className="text-lg text-muted-foreground line-through" data-testid="text-subtotal">
-                          € {formatEur(totalEstimated)}
-                        </div>
-                        <div className="text-xs text-amber-600 dark:text-amber-400" data-testid="text-global-discount-label">
-                          Sconto globale —{" "}
-                          {globalDiscountMode === "percent"
-                            ? `${parseFloat(globalDiscountValue || "0").toFixed(1)}%`
-                            : `€ ${formatEur(parseFloat(globalDiscountValue || "0"))}`}
-                        </div>
-                      </>
+                      <span className="text-sm text-amber-700 dark:text-amber-300 font-medium" data-testid="text-global-discount-amount">
+                        − € {formatEur(globalDiscountAmount)}
+                      </span>
                     )}
-                    <div className="text-xs text-muted-foreground mt-1">Totale stimato</div>
-                    <div className="text-2xl font-semibold" data-testid="text-total">
-                      € {formatEur(totalAfterDiscount)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      I prezzi vengono ricalcolati e congelati al salvataggio
+                  </div>
+                </div>
+
+                {/* Riepilogo costi/margini */}
+                <div className="mt-3 pt-3 border-t" data-testid="quote-summary-panel">
+                  <div className="flex flex-col gap-3">
+                    {items.length > 0 && (
+                      <div className="text-sm space-y-1" data-testid="quote-cost-summary">
+                        <div className="flex items-center gap-4">
+                          <span className="text-muted-foreground w-24 text-xs">Costo totale</span>
+                          <span className="font-semibold text-sm">€ {formatEur(quoteSummary.totalCost)}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-muted-foreground w-24 text-xs">Margine €</span>
+                          <span className="font-semibold text-sm">€ {formatEur(quoteSummary.totalMarginEur)}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-muted-foreground w-24 text-xs">Margine %</span>
+                          <span className="font-semibold text-sm" data-testid="avg-margin-percent">{quoteSummary.avgMarginPercent.toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      {globalDiscountAmount > 0 && (
+                        <>
+                          <div className="text-xs text-muted-foreground">Subtotale</div>
+                          <div className="text-base text-muted-foreground line-through" data-testid="text-subtotal">
+                            € {formatEur(totalEstimated)}
+                          </div>
+                          <div className="text-xs text-amber-600 dark:text-amber-400" data-testid="text-global-discount-label">
+                            Sconto —{" "}
+                            {globalDiscountMode === "percent"
+                              ? `${parseFloat(globalDiscountValue || "0").toFixed(1)}%`
+                              : `€ ${formatEur(parseFloat(globalDiscountValue || "0"))}`}
+                          </div>
+                        </>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-1">Totale bozza</div>
+                      <div className="text-2xl font-semibold" data-testid="text-total">
+                        € {formatEur(totalAfterDiscount)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Prezzi congelati al salvataggio
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            {/* ══════ Pannello destro: Preventivo cliente ══════ */}
+            {(() => {
+              const nonLaborItems = items.filter((it) => it.type !== "GIORNATE");
+              const hasLabor = items.some((it) => it.type === "GIORNATE");
+              return (
+                <Card>
+                  <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-base">Preventivo cliente</CardTitle>
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-100">Cliente</Badge>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleSpalma}
+                      disabled={!hasLabor || nonLaborItems.length === 0}
+                      data-testid="button-spalma"
+                    >
+                      <ArrowRightLeft className="w-4 h-4 mr-2" />
+                      Spalma manodopera
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {nonLaborItems.length === 0 ? (
+                      <div className="text-sm text-muted-foreground py-6 text-center">
+                        Nessuna riga non-manodopera.
+                      </div>
+                    ) : (
+                      <Table data-testid="table-client-items">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[90px]">Tipo</TableHead>
+                            <TableHead>Descrizione</TableHead>
+                            <TableHead className="w-[130px] text-right">Prezzo cliente</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {nonLaborItems.map((it) => (
+                            <TableRow key={it.uid}>
+                              <TableCell>{rowTypeBadge(it.type)}</TableCell>
+                              <TableCell className="text-xs">{rowDetails(it)}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-xs text-muted-foreground">€</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={clientPrices[it.uid] ?? (it.totalRow ?? "")}
+                                    onChange={(e) =>
+                                      setClientPrices((prev) => ({ ...prev, [it.uid]: e.target.value }))
+                                    }
+                                    className="w-28 h-7 text-right text-sm rounded border border-input bg-transparent px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                                    data-testid={`input-client-price-${it.uid}`}
+                                  />
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+
+                    {/* Indicatore di bilanciamento */}
+                    <div className="mt-3 pt-3 border-t flex items-end justify-between gap-3" data-testid="client-balance-panel">
+                      <div className="flex flex-col gap-1">
+                        <div className="text-xs text-muted-foreground">Vs. bozza interna</div>
+                        {isBalanced ? (
+                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-100 border-0 w-fit" data-testid="badge-balanced">
+                            ✓ Bilanciato
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-100 border-0 w-fit" data-testid="badge-diff">
+                            Δ € {formatEur(Math.abs(clientTotalAmount - totalAfterDiscount))}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-muted-foreground">Totale cliente</div>
+                        <div className="text-2xl font-semibold" data-testid="text-client-total">
+                          € {formatEur(clientTotalAmount)}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+          </div>{/* fine grid 2 colonne */}
         </>
       )}
 
