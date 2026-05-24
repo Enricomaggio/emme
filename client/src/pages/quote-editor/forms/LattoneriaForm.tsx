@@ -32,7 +32,7 @@ import type {
   MaterialWithThicknesses,
 } from "@shared/schema";
 import { DiscountFields } from "../components/DiscountFields";
-import { lattoneriaFormSchema } from "../schemas";
+import { lattoneriaFormSchema, LATTONERIA_PRODUCTS } from "../schemas";
 import type { QuoteItemDraft } from "../types";
 import type { QuoteItemDraftValues } from "../schemas";
 import { formatEur } from "../utils";
@@ -53,20 +53,31 @@ export function LattoneriaForm({
   submitLabel?: string;
   submitTestId?: string;
 }) {
+  const initialProductName = LATTONERIA_PRODUCTS.includes(initial?.description ?? "")
+    ? (initial?.description ?? "")
+    : initial?.description
+      ? "__CUSTOM__"
+      : "";
+  const initialCustomText = initialProductName === "__CUSTOM__" ? (initial?.description ?? "") : "";
+
   const form = useForm<z.infer<typeof lattoneriaFormSchema>>({
     resolver: zodResolver(lattoneriaFormSchema),
     defaultValues: {
+      productName: initialProductName,
+      productNameCustom: initialCustomText,
       materialId: initial?.materialId ?? "",
       materialThicknessId: initial?.materialThicknessId ?? "",
       materialFinishId: initial?.materialFinishId ?? "",
       developmentCm: initial?.developmentCm ?? "",
       quantity: initial?.quantity ?? "",
-      description: initial?.description ?? "",
       marginPercent: initial?.marginPercent ?? "",
       discountPercent: initial?.discountPercent ?? "",
       overrideTotal: initial?.overrideTotal ?? "",
     },
   });
+
+  const selectedProductName = form.watch("productName");
+  const isCustomProduct = selectedProductName === "__CUSTOM__";
 
   const selectedMaterialId = form.watch("materialId");
   const selectedThicknessId = form.watch("materialThicknessId");
@@ -125,6 +136,9 @@ export function LattoneriaForm({
   }, [selectedMaterial, selectedThickness, developmentCm, quantity, marginOverride, isSingle]);
 
   const submit = form.handleSubmit((vals) => {
+    const resolvedDescription = vals.productName === "__CUSTOM__"
+      ? (vals.productNameCustom?.trim() || "")
+      : vals.productName;
     const discountPct = vals.discountPercent && parseFloat(vals.discountPercent) > 0
       ? parseFloat(vals.discountPercent) : 0;
     const overrideTotalVal = vals.overrideTotal && parseFloat(vals.overrideTotal) >= 0
@@ -140,7 +154,7 @@ export function LattoneriaForm({
       : preview?.margin ?? 0;
     onSubmit({
       type: "LATTONERIA",
-      description: vals.description || "",
+      description: resolvedDescription,
       materialId: vals.materialId,
       materialThicknessId: vals.materialThicknessId,
       materialFinishId: vals.materialFinishId || undefined,
@@ -163,6 +177,44 @@ export function LattoneriaForm({
     <Form {...form}>
       <form onSubmit={submit} className="flex flex-col flex-1 min-h-0">
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          <FormField
+            control={form.control}
+            name="productName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tipo prodotto</FormLabel>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-product-name" autoFocus>
+                      <SelectValue placeholder="Seleziona tipo prodotto" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {LATTONERIA_PRODUCTS.map((p) => (
+                      <SelectItem key={p} value={p} data-testid={`option-product-${p}`}>{p}</SelectItem>
+                    ))}
+                    <SelectItem value="__CUSTOM__" data-testid="option-product-custom">— Personalizzato —</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {isCustomProduct && (
+            <FormField
+              control={form.control}
+              name="productNameCustom"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome prodotto personalizzato</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="Es. Gronda speciale, Scossalina curva..." data-testid="input-product-name-custom" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
           <FormField
             control={form.control}
             name="materialId"
@@ -318,19 +370,6 @@ export function LattoneriaForm({
                         {...field}
                         data-testid="input-margin-override"
                       />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrizione (opzionale)</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="input-description" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -90,8 +90,10 @@ export function buildItemDescription(it: PdfQuoteItem): string {
   const base = it.resolvedName || it.description || "";
   if (it.type === "LATTONERIA" && it.developmentCm) {
     const dev = parseFloat(it.developmentCm);
+    const qty = parseFloat(it.quantity);
     if (isFinite(dev) && dev > 0) {
-      return `${base}${base ? " — " : ""}sviluppo ${fmtMeasure(dev)} cm`;
+      const qtyPart = isFinite(qty) && qty > 0 ? ` × ${fmtMeasure(qty)} ml` : "";
+      return `${base}${base ? " — " : ""}sviluppo ${fmtMeasure(dev)} cm${qtyPart}`;
     }
   }
   return base || "—";

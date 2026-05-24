@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, UserPlus, TrendingUp, TrendingDown, CheckCircle2, Bell, BellRing, Check, ExternalLink, Clock, AlertTriangle, FileText, Trophy, User, Briefcase, Calendar, Minus, ChevronDown, ChevronUp, Euro, Send, XCircle, FolderKanban, Camera, Video, Pencil, Target, Timer, AlertCircle, CreditCard, ArrowDownToLine, ArrowUpFromLine, Banknote, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { ComposedChart, BarChart, Bar, Line, ReferenceLine, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Dot } from "recharts";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -1587,6 +1587,133 @@ function SalesAgentDashboard({
   );
 }
 
+// ─── Proiezione Flusso di Cassa (Superbill) ──────────────────────────────────
+
+interface ProiezioneMese {
+  mese: string;
+  entrate: number;
+  uscite: number;
+}
+
+function ProiezioneFinanziaria() {
+  const [numMesi, setNumMesi] = useState<3 | 6 | 12>(6);
+
+  const { data, isLoading } = useQuery<{ isMock: boolean; mesi: ProiezioneMese[] }>({
+    queryKey: [`/api/superbill/proiezione?mesi=${numMesi}`],
+  });
+
+  const mesi = data?.mesi || [];
+  const isMock = data?.isMock ?? true;
+
+  const chartData = mesi.map((m) => ({ ...m, saldo: m.entrate - m.uscite }));
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const saldoEntry = payload.find((e: any) => e.dataKey === "saldo");
+    const saldo = saldoEntry?.value ?? null;
+    return (
+      <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm space-y-1">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        {payload.filter((e: any) => e.dataKey !== "saldo").map((entry: any) => (
+          <div key={entry.name} className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+            <span className="text-muted-foreground">{entry.name}:</span>
+            <span className="font-medium text-foreground">{fmt(entry.value)}</span>
+          </div>
+        ))}
+        {saldo !== null && (
+          <div className="flex items-center gap-2 border-t border-border pt-1 mt-1">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: saldo >= 0 ? "#3b82f6" : "#ef4444" }} />
+            <span className="text-muted-foreground">Saldo:</span>
+            <span className={`font-semibold ${saldo >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
+              {fmt(saldo)}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const SaldoDot = (props: any) => {
+    const { cx, cy, value } = props;
+    if (cx == null || cy == null) return null;
+    return <circle cx={cx} cy={cy} r={4} fill={value >= 0 ? "#22c55e" : "#ef4444"} stroke="#fff" strokeWidth={1.5} />;
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 flex-wrap">
+          <Banknote className="w-5 h-5 text-primary" />
+          Proiezione Flusso di Cassa
+          {isMock && (
+            <span className="text-xs font-normal text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full">
+              DEMO
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-1 bg-muted rounded-full p-0.5">
+            {([3, 6, 12] as const).map((m) => (
+              <button
+                key={m}
+                data-testid={`proiezione-toggle-${m}`}
+                onClick={() => setNumMesi(m)}
+                className={`text-xs px-2.5 py-1 rounded-full transition-colors font-medium ${
+                  numMesi === m
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {m} mesi
+              </button>
+            ))}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-56 w-full" />
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }} barCategoryGap="30%">
+              <XAxis dataKey="mese" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+              <YAxis
+                tickFormatter={(v) =>
+                  new Intl.NumberFormat("it-IT", { notation: "compact", maximumFractionDigits: 0 }).format(v)
+                }
+                tick={{ fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                width={52}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend
+                formatter={(value) => (
+                  <span className="text-xs text-muted-foreground">{value}</span>
+                )}
+              />
+              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 2" />
+              <Bar dataKey="entrate" name="Entrate" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="uscite" name="Uscite" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <Line
+                dataKey="saldo"
+                name="Saldo"
+                type="monotone"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                dot={<SaldoDot />}
+                activeDot={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Scadenze Finanziarie (Superbill) ────────────────────────────────────────
 
 interface ScadenzaFinanziaria {
@@ -2732,6 +2859,9 @@ function AdminDashboard({
 
       {/* Scadenze Finanziarie Superbill */}
       <ScadenzeFinanziarie />
+
+      {/* Proiezione Flusso di Cassa Superbill */}
+      <ProiezioneFinanziaria />
     </div>
   );
 }
