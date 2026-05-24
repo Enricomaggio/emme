@@ -94,7 +94,11 @@ export const workOrdersStorage = {
 
     let insertedItems: WorkOrderItem[] = [];
     if (sourceItems.length > 0) {
-      const woItemPayloads = sourceItems.map((item, i) => {
+      // Filtra le righe interne (isInternalOnly) prima di creare le voci NL
+      const clientItems = sourceItems.filter(
+        item => !item.isInternalOnly
+      );
+      const woItemPayloads = clientItems.map((item, i) => {
         const qty = parseFloat(item.quantity ?? "0");
         // Usa clientTotal (colonna destra) se disponibile, altrimenti totalRow
         const clientRowTotal = item.clientTotal ?? item.totalRow ?? "0";
@@ -110,6 +114,8 @@ export const workOrdersStorage = {
           unitPrice: clientUnitPrice,
           totalRow: clientRowTotal,
           displayOrder: i,
+          // Popola sourceQuoteItemId per il tracking SAL
+          sourceQuoteItemId: item.id,
         };
       });
       insertedItems = await db
@@ -343,6 +349,11 @@ export const workOrdersStorage = {
     if (items.length === 0) return { ...emptyResult, quoteId: mainQuote.id };
 
     const itemIds = items.map(i => i.id);
+    const itemIdSet = new Set(itemIds);
+
+    // Recupera tutte le righe NL fatturate per questa opportunity (filtro su opportunityId,
+    // più robusto di inArray su colonna nullable che può generare SQL problematico).
+    // Il filtraggio per sourceQuoteItemId avviene in application code.
     const invoicedWoItems = await db
       .select({
         sourceQuoteItemId: workOrderItems.sourceQuoteItemId,
@@ -353,19 +364,21 @@ export const workOrdersStorage = {
       .innerJoin(workOrders, eq(workOrderItems.workOrderId, workOrders.id))
       .where(
         and(
+          eq(workOrders.opportunityId, opportunityId),
           eq(workOrders.companyId, companyId),
-          isNotNull(workOrders.invoicedAt),
-          inArray(workOrderItems.sourceQuoteItemId, itemIds)
+          isNotNull(workOrders.invoicedAt)
         )
       );
 
     const invoicedByItem = new Map<string, { qty: number; total: number }>();
     for (const woItem of invoicedWoItems) {
-      if (!woItem.sourceQuoteItemId) continue;
-      const existing = invoicedByItem.get(woItem.sourceQuoteItemId) ?? { qty: 0, total: 0 };
+      const sid = woItem.sourceQuoteItemId;
+      // Considera solo righe NL con sourceQuoteItemId che appartiene al preventivo corrente
+      if (!sid || !itemIdSet.has(sid)) continue;
+      const existing = invoicedByItem.get(sid) ?? { qty: 0, total: 0 };
       existing.qty += parseFloat(woItem.quantity ?? "0");
       existing.total += parseFloat(woItem.totalRow ?? "0");
-      invoicedByItem.set(woItem.sourceQuoteItemId, existing);
+      invoicedByItem.set(sid, existing);
     }
 
     let totalPreventivo = 0;

@@ -263,6 +263,28 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
     },
   });
 
+  // Invio diretto senza aprire la pagina NL
+  const sendWoMutation = useMutation({
+    mutationFn: (woId: string) => apiRequest("POST", `/api/work-orders/${woId}/send`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders?companyScope=all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/opportunities?won=true"] });
+      toast({ title: "Nota Lavori inviata" });
+    },
+    onError: () => toast({ title: "Errore nell'invio", variant: "destructive" }),
+  });
+
+  // Conferma diretta senza aprire la pagina NL
+  const confirmWoMutation = useMutation({
+    mutationFn: (woId: string) => apiRequest("POST", `/api/work-orders/${woId}/confirm`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders?companyScope=all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/opportunities?won=true"] });
+      toast({ title: "Nota Lavori confermata" });
+    },
+    onError: () => toast({ title: "Errore nella conferma", variant: "destructive" }),
+  });
+
   function renderAction() {
     if (wos.length === 0) {
       return (
@@ -278,17 +300,49 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
 
     if (lastWo && lastWo.status === "DRAFT") {
       return (
-        <Button size="sm" variant="outline" onClick={() => { window.location.href = `/work-orders/${lastWo.id}`; }}>
-          Apri NL
-        </Button>
+        <div className="flex gap-1.5 items-center">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => { window.location.href = `/work-orders/${lastWo.id}`; }}
+          >
+            Apri NL
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => sendWoMutation.mutate(lastWo.id)}
+            disabled={sendWoMutation.isPending}
+            title="Invia la Nota Lavori direttamente"
+          >
+            {sendWoMutation.isPending
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : "Invia →"}
+          </Button>
+        </div>
       );
     }
 
     if (lastWo && lastWo.status === "SENT") {
       return (
-        <Button size="sm" variant="outline" onClick={() => { window.location.href = `/work-orders/${lastWo.id}`; }}>
-          Vedi NL
-        </Button>
+        <div className="flex gap-1.5 items-center">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => { window.location.href = `/work-orders/${lastWo.id}`; }}
+          >
+            Vedi NL
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => confirmWoMutation.mutate(lastWo.id)}
+            disabled={confirmWoMutation.isPending}
+            title="Conferma ricezione della Nota Lavori"
+          >
+            {confirmWoMutation.isPending
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : "Conferma ✓"}
+          </Button>
+        </div>
       );
     }
 
