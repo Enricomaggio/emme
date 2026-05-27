@@ -6,7 +6,7 @@ import {
   type Article, type InsertArticle,
 } from "@shared/schema";
 import { db } from "../db";
-import { eq, and, or, lte } from "drizzle-orm";
+import { eq, and, or, lte, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export const usersStorage = {
@@ -137,9 +137,21 @@ export const usersStorage = {
       .orderBy(contactReferents.createdAt);
   },
 
+  async getReferentsByContactIds(contactIds: string[]): Promise<ContactReferent[]> {
+    if (contactIds.length === 0) return [];
+    return db.select().from(contactReferents)
+      .where(inArray(contactReferents.contactId, contactIds))
+      .orderBy(contactReferents.createdAt);
+  },
+
   async getReferent(id: string): Promise<ContactReferent | undefined> {
     const [referent] = await db.select().from(contactReferents).where(eq(contactReferents.id, id));
     return referent || undefined;
+  },
+
+  async getReferentsByIds(ids: string[]): Promise<ContactReferent[]> {
+    if (ids.length === 0) return [];
+    return db.select().from(contactReferents).where(inArray(contactReferents.id, ids));
   },
 
   async createReferent(data: InsertContactReferent): Promise<ContactReferent> {

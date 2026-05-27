@@ -356,21 +356,27 @@ leadsRouter.get("/leads", isAuthenticated, async (req, res) => {
       }
     }
 
-    const leadsWithReferents = await Promise.all(
-      leads.map(async (lead) => {
-        const opportunitySummary = opportunitySummaryMap.get(lead.id) ?? { total: 0, wonCount: 0, lostCount: 0, activeCount: 0 };
-        if (lead.entityType === "COMPANY") {
-          const referents = await storage.getReferentsByContactId(lead.id);
-          const firstRef = referents.length > 0 ? referents[0] : null;
-          return {
-            ...lead,
-            firstReferentName: firstRef ? `${firstRef.firstName} ${firstRef.lastName}`.trim() : null,
-            opportunitySummary,
-          };
-        }
-        return { ...lead, firstReferentName: null, opportunitySummary };
-      })
-    );
+    const companyLeadIds = leads.filter(l => l.entityType === "COMPANY").map(l => l.id);
+    const allReferents = await storage.getReferentsByContactIds(companyLeadIds);
+    const referentsByContactId = new Map<string, typeof allReferents>();
+    for (const ref of allReferents) {
+      if (!referentsByContactId.has(ref.contactId)) referentsByContactId.set(ref.contactId, []);
+      referentsByContactId.get(ref.contactId)!.push(ref);
+    }
+
+    const leadsWithReferents = leads.map(lead => {
+      const opportunitySummary = opportunitySummaryMap.get(lead.id) ?? { total: 0, wonCount: 0, lostCount: 0, activeCount: 0 };
+      if (lead.entityType === "COMPANY") {
+        const refs = referentsByContactId.get(lead.id) || [];
+        const firstRef = refs.length > 0 ? refs[0] : null;
+        return {
+          ...lead,
+          firstReferentName: firstRef ? `${firstRef.firstName} ${firstRef.lastName}`.trim() : null,
+          opportunitySummary,
+        };
+      }
+      return { ...lead, firstReferentName: null, opportunitySummary };
+    });
     res.json(leadsWithReferents);
   } catch (error) {
     console.error("Error fetching leads:", error);

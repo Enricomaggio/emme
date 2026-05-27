@@ -255,16 +255,45 @@ export const pipelineStorage = {
   },
 
   async getActivitiesByLead(leadId: string, companyId: string): Promise<(ActivityLog & { userName: string | null })[]> {
-    const leadActivities = await pipelineStorage.getActivitiesByEntity("lead", leadId, companyId);
-
     const leadOpportunities = await pipelineStorage.getOpportunitiesByLead(leadId, companyId);
     const opportunityIds = leadOpportunities.map(o => o.id);
 
-    let opportunityActivities: (ActivityLog & { userName: string | null })[] = [];
-    for (const oppId of opportunityIds) {
-      const oppLogs = await pipelineStorage.getActivitiesByEntity("opportunity", oppId, companyId);
-      opportunityActivities = [...opportunityActivities, ...oppLogs];
-    }
+    const [leadActivities, opportunityActivities] = await Promise.all([
+      pipelineStorage.getActivitiesByEntity("lead", leadId, companyId),
+      opportunityIds.length > 0
+        ? db.select({
+            id: activityLogs.id,
+            companyId: activityLogs.companyId,
+            userId: activityLogs.userId,
+            entityType: activityLogs.entityType,
+            entityId: activityLogs.entityId,
+            action: activityLogs.action,
+            details: activityLogs.details,
+            createdAt: activityLogs.createdAt,
+            userFirstName: users.firstName,
+            userLastName: users.lastName,
+          })
+          .from(activityLogs)
+          .leftJoin(users, eq(activityLogs.userId, users.id))
+          .where(and(
+            eq(activityLogs.entityType, "opportunity"),
+            inArray(activityLogs.entityId, opportunityIds),
+            eq(activityLogs.companyId, companyId)
+          ))
+          .orderBy(desc(activityLogs.createdAt))
+          .then(rows => rows.map(r => ({
+            id: r.id,
+            companyId: r.companyId,
+            userId: r.userId,
+            entityType: r.entityType,
+            entityId: r.entityId,
+            action: r.action,
+            details: r.details,
+            createdAt: r.createdAt,
+            userName: r.userFirstName && r.userLastName ? `${r.userFirstName} ${r.userLastName}` : r.userFirstName || null,
+          })))
+        : Promise.resolve([] as (ActivityLog & { userName: string | null })[]),
+    ]);
 
     const allActivities = [...leadActivities, ...opportunityActivities];
     allActivities.sort((a, b) => {

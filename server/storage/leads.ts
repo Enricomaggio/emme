@@ -146,6 +146,11 @@ export const leadsStorage = {
     return lead || undefined;
   },
 
+  async getLeadsByIds(ids: string[]): Promise<Lead[]> {
+    if (ids.length === 0) return [];
+    return db.select().from(leads).where(inArray(leads.id, ids));
+  },
+
   async createLead(data: InsertLead): Promise<Lead> {
     const insertData = {
       name: data.name,

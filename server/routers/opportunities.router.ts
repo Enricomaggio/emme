@@ -151,10 +151,10 @@ opportunitiesRouter.get("/opportunities", isAuthenticated, async (req, res) => {
     const opportunities = await storage.getOpportunitiesWithAccess(ctx);
     const referentIds = Array.from(new Set(opportunities.map(o => o.referentId).filter((id): id is string => id !== null)));
     const referentMap = new Map<string, string>();
-    for (const refId of referentIds) {
-      const ref = await storage.getReferent(refId);
-      if (ref) {
-        referentMap.set(refId, `${ref.firstName || ""} ${ref.lastName || ""}`.trim());
+    if (referentIds.length > 0) {
+      const refs = await storage.getReferentsByIds(referentIds);
+      for (const ref of refs) {
+        referentMap.set(ref.id, `${ref.firstName || ""} ${ref.lastName || ""}`.trim());
       }
     }
     const enriched = opportunities.map(o => ({
@@ -165,15 +165,30 @@ opportunitiesRouter.get("/opportunities", isAuthenticated, async (req, res) => {
     // Filtro opportunità vinte con enrichment leadName + quoteTotal
     if (req.query.won === "true") {
       const wonOpps = enriched.filter(o => o.wonAt !== null);
-      const enrichedWon = await Promise.all(wonOpps.map(async o => {
-        const lead = await storage.getLead(o.leadId, o.companyId);
+      const uniqueLeadIds = Array.from(new Set(wonOpps.map(o => o.leadId)));
+      const wonOppIds = wonOpps.map(o => o.id);
+
+      const [allLeads, allQuotes] = await Promise.all([
+        storage.getLeadsByIds(uniqueLeadIds),
+        storage.getQuotesByOpportunityIds(wonOppIds),
+      ]);
+
+      const leadsById = new Map(allLeads.map(l => [l.id, l]));
+      const quotesByOppId = new Map<string, typeof allQuotes>();
+      for (const q of allQuotes) {
+        if (!quotesByOppId.has(q.opportunityId!)) quotesByOppId.set(q.opportunityId!, []);
+        quotesByOppId.get(q.opportunityId!)!.push(q);
+      }
+
+      const enrichedWon = wonOpps.map(o => {
+        const lead = leadsById.get(o.leadId);
         const leadName = lead
           ? (lead.entityType === "COMPANY" ? lead.name || "" : `${lead.firstName || ""} ${lead.lastName || ""}`.trim())
           : null;
-        const oppQuotes = await storage.getQuotesByOpportunity(o.id, o.companyId);
+        const oppQuotes = quotesByOppId.get(o.id) || [];
         const quoteTotal = oppQuotes.reduce((sum, q) => sum + parseFloat(q.totalAmount || "0"), 0);
         return { ...o, leadName, quoteTotal: quoteTotal.toFixed(2) };
-      }));
+      });
       return res.json(enrichedWon);
     }
 

@@ -14,6 +14,13 @@ export const quotesStorage = {
       .orderBy(desc(quotes.createdAt));
   },
 
+  async getQuotesByOpportunityIds(opportunityIds: string[]): Promise<Quote[]> {
+    if (opportunityIds.length === 0) return [];
+    return db.select().from(quotes)
+      .where(inArray(quotes.opportunityId, opportunityIds))
+      .orderBy(desc(quotes.createdAt));
+  },
+
   async getQuote(id: string, companyId: string): Promise<Quote | undefined> {
     const [quote] = await db.select().from(quotes)
       .where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)));
@@ -78,13 +85,6 @@ export const quotesStorage = {
     const result = await db.delete(quotes)
       .where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)));
     return (result.rowCount ?? 0) > 0;
-  },
-
-  async getQuotesByOpportunityIds(opportunityIds: string[], companyId: string): Promise<Quote[]> {
-    if (opportunityIds.length === 0) return [];
-    return db.select().from(quotes)
-      .where(and(inArray(quotes.opportunityId, opportunityIds), eq(quotes.companyId, companyId)))
-      .orderBy(desc(quotes.createdAt));
   },
 
   // ============ Quote Items ============

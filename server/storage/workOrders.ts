@@ -226,16 +226,21 @@ export const workOrdersStorage = {
       .where(and(eq(workOrders.opportunityId, opportunityId), eq(workOrders.companyId, companyId)))
       .orderBy(workOrders.createdAt);
     if (woList.length === 0) return [];
-    const results: WorkOrderWithItems[] = [];
-    for (const wo of woList) {
-      const items = await db
-        .select()
-        .from(workOrderItems)
-        .where(eq(workOrderItems.workOrderId, wo.id))
-        .orderBy(workOrderItems.displayOrder);
-      results.push({ ...wo, items });
+
+    const woIds = woList.map(wo => wo.id);
+    const allItems = await db
+      .select()
+      .from(workOrderItems)
+      .where(inArray(workOrderItems.workOrderId, woIds))
+      .orderBy(workOrderItems.displayOrder);
+
+    const itemsByWoId = new Map<string, typeof allItems>();
+    for (const item of allItems) {
+      if (!itemsByWoId.has(item.workOrderId)) itemsByWoId.set(item.workOrderId, []);
+      itemsByWoId.get(item.workOrderId)!.push(item);
     }
-    return results;
+
+    return woList.map(wo => ({ ...wo, items: itemsByWoId.get(wo.id) ?? [] }));
   },
 
   async getAllWorkOrdersByCompany(companyId: string): Promise<WorkOrderWithItems[]> {
@@ -245,16 +250,21 @@ export const workOrdersStorage = {
       .where(eq(workOrders.companyId, companyId))
       .orderBy(workOrders.createdAt);
     if (woList.length === 0) return [];
-    const results: WorkOrderWithItems[] = [];
-    for (const wo of woList) {
-      const items = await db
-        .select()
-        .from(workOrderItems)
-        .where(eq(workOrderItems.workOrderId, wo.id))
-        .orderBy(workOrderItems.displayOrder);
-      results.push({ ...wo, items });
+
+    const woIds = woList.map(wo => wo.id);
+    const allItems = await db
+      .select()
+      .from(workOrderItems)
+      .where(inArray(workOrderItems.workOrderId, woIds))
+      .orderBy(workOrderItems.displayOrder);
+
+    const itemsByWoId = new Map<string, typeof allItems>();
+    for (const item of allItems) {
+      if (!itemsByWoId.has(item.workOrderId)) itemsByWoId.set(item.workOrderId, []);
+      itemsByWoId.get(item.workOrderId)!.push(item);
     }
-    return results;
+
+    return woList.map(wo => ({ ...wo, items: itemsByWoId.get(wo.id) ?? [] }));
   },
 
   async registerInvoice(

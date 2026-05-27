@@ -570,7 +570,10 @@ function PipelineManageDialog({ stages, opportunities }: { stages: PipelineStage
       originalStagesRef.current = JSON.stringify(initial);
       setPipelineDirty(false);
     }
-  }, [open, stages, setPipelineDirty]);
+    // stages escluso intenzionalmente: l'effetto deve girare solo all'apertura del dialog,
+    // non ad ogni refetch in background (che crea un nuovo riferimento array e azzererebbe le modifiche)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   useEffect(() => {
     if (open && originalStagesRef.current) {
