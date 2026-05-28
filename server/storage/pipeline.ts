@@ -1,6 +1,6 @@
 import {
   pipelineStages, opportunities, activityLogs, users,
-  quotes, quoteItems, reminders,
+  quotes, quoteItems, reminders, workOrders, workOrderItems,
   type PipelineStage, type InsertPipelineStage,
   type Opportunity, type InsertOpportunity,
   type ActivityLog, type InsertActivityLog,
@@ -150,6 +150,17 @@ export const pipelineStorage = {
 
     await db.delete(quotes)
       .where(and(eq(quotes.opportunityId, id), eq(quotes.companyId, companyId)));
+
+    // Elimina work order items prima (via work orders) poi work orders
+    const relatedWorkOrders = await db.select({ id: workOrders.id }).from(workOrders)
+      .where(and(eq(workOrders.opportunityId, id), eq(workOrders.companyId, companyId)));
+
+    for (const wo of relatedWorkOrders) {
+      await db.delete(workOrderItems).where(eq(workOrderItems.workOrderId, wo.id));
+    }
+
+    await db.delete(workOrders)
+      .where(and(eq(workOrders.opportunityId, id), eq(workOrders.companyId, companyId)));
 
     await db.delete(reminders)
       .where(and(eq(reminders.opportunityId, id), eq(reminders.companyId, companyId)));
