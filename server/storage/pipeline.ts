@@ -141,17 +141,7 @@ export const pipelineStorage = {
   },
 
   async deleteOpportunity(id: string, companyId: string): Promise<boolean> {
-    const relatedQuotes = await db.select({ id: quotes.id }).from(quotes)
-      .where(and(eq(quotes.opportunityId, id), eq(quotes.companyId, companyId)));
-
-    for (const q of relatedQuotes) {
-      await db.delete(quoteItems).where(eq(quoteItems.quoteId, q.id));
-    }
-
-    await db.delete(quotes)
-      .where(and(eq(quotes.opportunityId, id), eq(quotes.companyId, companyId)));
-
-    // Elimina work order items prima (via work orders) poi work orders
+    // work_orders.quoteId → quotes.id: elimina work orders PRIMA dei quotes
     const relatedWorkOrders = await db.select({ id: workOrders.id }).from(workOrders)
       .where(and(eq(workOrders.opportunityId, id), eq(workOrders.companyId, companyId)));
 
@@ -161,6 +151,16 @@ export const pipelineStorage = {
 
     await db.delete(workOrders)
       .where(and(eq(workOrders.opportunityId, id), eq(workOrders.companyId, companyId)));
+
+    const relatedQuotes = await db.select({ id: quotes.id }).from(quotes)
+      .where(and(eq(quotes.opportunityId, id), eq(quotes.companyId, companyId)));
+
+    for (const q of relatedQuotes) {
+      await db.delete(quoteItems).where(eq(quoteItems.quoteId, q.id));
+    }
+
+    await db.delete(quotes)
+      .where(and(eq(quotes.opportunityId, id), eq(quotes.companyId, companyId)));
 
     await db.delete(reminders)
       .where(and(eq(reminders.opportunityId, id), eq(reminders.companyId, companyId)));

@@ -118,15 +118,16 @@ export const leadsStorage = {
 
     const leadOpportunities = await db.select({ id: opportunities.id }).from(opportunities).where(eq(opportunities.leadId, id));
     for (const opp of leadOpportunities) {
-      await db.delete(quoteItems).where(
-        sql`${quoteItems.quoteId} IN (SELECT id FROM quotes WHERE opportunity_id = ${opp.id})`
-      );
-      await db.delete(quotes).where(eq(quotes.opportunityId, opp.id));
+      // work_orders.quoteId → quotes.id: elimina work orders PRIMA dei quotes
       const relatedWOs = await db.select({ id: workOrders.id }).from(workOrders).where(eq(workOrders.opportunityId, opp.id));
       for (const wo of relatedWOs) {
         await db.delete(workOrderItems).where(eq(workOrderItems.workOrderId, wo.id));
       }
       await db.delete(workOrders).where(eq(workOrders.opportunityId, opp.id));
+      await db.delete(quoteItems).where(
+        sql`${quoteItems.quoteId} IN (SELECT id FROM quotes WHERE opportunity_id = ${opp.id})`
+      );
+      await db.delete(quotes).where(eq(quotes.opportunityId, opp.id));
     }
     await db.delete(opportunities).where(eq(opportunities.leadId, id));
     await db.execute(sql`DELETE FROM creditsafe_reports WHERE lead_id = ${id}`);
