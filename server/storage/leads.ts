@@ -1,5 +1,5 @@
 import {
-  leads, opportunities, quotes, quoteItems, activityLogs,
+  leads, opportunities, quotes, quoteItems, activityLogs, workOrders, workOrderItems,
   type Lead, type InsertLead,
   type ContactType, type EntityType, type ContactSource,
 } from "@shared/schema";
@@ -122,6 +122,11 @@ export const leadsStorage = {
         sql`${quoteItems.quoteId} IN (SELECT id FROM quotes WHERE opportunity_id = ${opp.id})`
       );
       await db.delete(quotes).where(eq(quotes.opportunityId, opp.id));
+      const relatedWOs = await db.select({ id: workOrders.id }).from(workOrders).where(eq(workOrders.opportunityId, opp.id));
+      for (const wo of relatedWOs) {
+        await db.delete(workOrderItems).where(eq(workOrderItems.workOrderId, wo.id));
+      }
+      await db.delete(workOrders).where(eq(workOrders.opportunityId, opp.id));
     }
     await db.delete(opportunities).where(eq(opportunities.leadId, id));
     await db.execute(sql`DELETE FROM creditsafe_reports WHERE lead_id = ${id}`);
