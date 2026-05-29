@@ -29,7 +29,6 @@ export const LATTONERIA_PRODUCTS = [
   "Bavetta",
   "Sguscio",
   "Fascia paraghiaia",
-  "Converse",
   "Scossalina a muro",
   "Cappello da muro",
   "Listello coprigiunto",
