@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Badge } from "@/components/ui/badge";
@@ -11,10 +11,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, RefreshCw, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw, Loader2, Eye, Search } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { WorkOrderWithItems } from "@shared/schema";
+import type { WorkOrderWithItems, Company } from "@shared/schema";
+import { PDFViewer } from "@react-pdf/renderer";
+import { QuotePdfDocument } from "@/pdf/QuotePdfDocument";
+import type { PdfQuote, PdfCustomer } from "@/pdf/quote-pdf-utils";
 
 type SiteStatus = "ACTIVE" | "INVOICING_PENDING" | "COMPLETED";
 
@@ -217,6 +220,160 @@ function InvoiceModal({ open, workOrderId, defaultAmount, onClose }: InvoiceModa
   );
 }
 
+interface QuoteApiResponse {
+  id: string;
+  number: string;
+  totalAmount: string;
+  subject: string | null;
+  notes: string | null;
+  createdAt: string;
+  discounts?: {
+    globalDiscountMode?: "percent" | "euro";
+    globalDiscountPercent?: number;
+    globalDiscountAmount?: number;
+  } | null;
+  items: Array<{
+    id: string;
+    type: string | null;
+    description: string | null;
+    unitOfMeasure: string | null;
+    developmentCm: string | null;
+    quantity: string;
+    unitPriceApplied: string;
+    totalRow: string;
+    displayOrder: number;
+    discountPercent: string | null;
+    overrideTotal: string | null;
+    baseTotal: string | null;
+    isInternalOnly: boolean | null;
+    clientTotal: string | null;
+  }>;
+}
+
+interface QuotePreviewModalProps {
+  open: boolean;
+  onClose: () => void;
+  opportunityId: string;
+  leadId: string;
+  oppTitle: string;
+}
+
+function QuotePreviewModal({ open, onClose, opportunityId, leadId, oppTitle }: QuotePreviewModalProps) {
+  const quotesListQuery = useQuery<Array<{ id: string }>>({
+    queryKey: ["/api/opportunities", opportunityId, "quotes"],
+    enabled: open,
+  });
+
+  const quoteId = quotesListQuery.data?.[0]?.id ?? null;
+
+  const quoteQuery = useQuery<QuoteApiResponse>({
+    queryKey: ["/api/quotes", quoteId],
+    enabled: open && !!quoteId,
+  });
+
+  const companyQuery = useQuery<Company>({
+    queryKey: ["/api/company"],
+  });
+
+  const leadQuery = useQuery<PdfCustomer & { id: string; paymentMethodId?: string | null }>({
+    queryKey: ["/api/leads", leadId],
+    enabled: open,
+  });
+
+  const paymentMethodsQuery = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ["/api/payment-methods"],
+    enabled: open,
+  });
+
+  const paymentMethodName = useMemo(() => {
+    if (!leadQuery.data?.paymentMethodId || !paymentMethodsQuery.data) return null;
+    return paymentMethodsQuery.data.find((pm) => pm.id === leadQuery.data?.paymentMethodId)?.name ?? null;
+  }, [leadQuery.data, paymentMethodsQuery.data]);
+
+  const company = useMemo(() => {
+    if (!companyQuery.data) return null;
+    return {
+      ...companyQuery.data,
+      logoUrl: companyQuery.data.logoUrl || `${window.location.origin}/gdm-logo.png`,
+    };
+  }, [companyQuery.data]);
+
+  const mappedQuote = useMemo((): PdfQuote | null => {
+    const q = quoteQuery.data;
+    if (!q) return null;
+    const gdMode = q.discounts?.globalDiscountMode;
+    const gdVal = gdMode === "percent" ? q.discounts?.globalDiscountPercent : q.discounts?.globalDiscountAmount;
+    const globalDiscount = gdMode && gdVal != null && gdVal > 0 ? { mode: gdMode, value: gdVal } : null;
+    return {
+      id: q.id,
+      number: q.number,
+      subject: q.subject,
+      notes: q.notes,
+      totalAmount: q.totalAmount,
+      createdAt: q.createdAt,
+      globalDiscount,
+      items: q.items
+        .filter((it) => !it.isInternalOnly && it.type !== "GIORNATE")
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map((it) => {
+          const qty = parseFloat(it.quantity) || 1;
+          const effectiveTotal = it.clientTotal != null ? it.clientTotal : it.totalRow;
+          const effectiveUnit = it.clientTotal != null
+            ? String(Math.round(parseFloat(it.clientTotal) / qty * 100) / 100)
+            : it.unitPriceApplied;
+          return {
+            id: it.id,
+            type: it.type as PdfQuote["items"][number]["type"],
+            description: it.description,
+            unitOfMeasure: it.unitOfMeasure,
+            developmentCm: it.developmentCm,
+            quantity: it.quantity,
+            unitPriceApplied: effectiveUnit,
+            totalRow: effectiveTotal,
+            displayOrder: it.displayOrder,
+            discountPercent: it.discountPercent,
+            overrideTotal: it.overrideTotal,
+            baseTotal: it.baseTotal,
+          };
+        }),
+    };
+  }, [quoteQuery.data]);
+
+  const isReady = !!company && !!mappedQuote && !leadQuery.isLoading;
+  const noQuote = quotesListQuery.isSuccess && !quoteId;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-6xl w-[95vw] h-[92vh] flex flex-col p-0">
+        <DialogHeader className="px-4 pt-4 pb-2">
+          <DialogTitle>Preventivo — {oppTitle}</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 px-4 pb-4">
+          {isReady && company && mappedQuote ? (
+            <PDFViewer style={{ width: "100%", height: "100%", border: "none" }}>
+              <QuotePdfDocument
+                company={company}
+                customer={leadQuery.data ?? null}
+                quote={mappedQuote}
+                opportunityTitle={oppTitle}
+                paymentMethodName={paymentMethodName}
+              />
+            </PDFViewer>
+          ) : noQuote ? (
+            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+              Nessun preventivo collegato a questo cantiere.
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 interface CantiereRowProps {
   opp: WonOpportunity;
   wos: WorkOrderWithItems[];
@@ -229,6 +386,7 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
 
   const [salExpanded, setSalExpanded] = useState(false);
   const [salLoaded, setSalLoaded] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const { data: salData, isLoading: salLoading } = useQuery<SalData>({
     queryKey: ["/api/opportunities", opp.id, "sal"],
@@ -404,7 +562,18 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
         <td className="px-4 py-3 font-medium">{opp.leadName || "—"}</td>
         <td className="px-4 py-3 text-sm text-muted-foreground">{opp.title}</td>
         <td className="px-4 py-3 text-right text-sm">
-          {quoteTotal > 0 ? formatEuro(quoteTotal) : "—"}
+          <div className="flex items-center justify-end gap-1.5">
+            {quoteTotal > 0 ? formatEuro(quoteTotal) : "—"}
+            {quoteTotal > 0 && (
+              <button
+                onClick={() => setPreviewOpen(true)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Anteprima preventivo"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </td>
         <td className="px-4 py-3 text-right text-sm">
           {fatturato > 0 ? formatEuro(fatturato) : "—"}
@@ -438,6 +607,15 @@ function CantiereRow({ opp, wos, onInvoice }: CantiereRowProps) {
             )}
           </td>
         </tr>
+      )}
+      {previewOpen && (
+        <QuotePreviewModal
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+          opportunityId={opp.id}
+          leadId={opp.leadId}
+          oppTitle={opp.title}
+        />
       )}
     </>
   );
@@ -486,6 +664,7 @@ function SectionTable({ opportunities, wosByOppId, onInvoice }: SectionTableProp
 export default function CantieriPage() {
   const [completedOpen, setCompletedOpen] = useState(false);
   const [invoiceModal, setInvoiceModal] = useState<{ workOrderId: string; defaultAmount: string } | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data: wonOpps = [], isLoading: oppsLoading, refetch: refetchOpps } = useQuery<WonOpportunity[]>({
     queryKey: ["/api/opportunities?won=true"],
@@ -508,19 +687,34 @@ export default function CantieriPage() {
     wosByOppId.set(wo.opportunityId, [...existing, wo]);
   }
 
-  const invoicingOpps = wonOpps.filter((o) => o.siteStatus === "INVOICING_PENDING");
-  const activeOpps = wonOpps.filter((o) => o.siteStatus === "ACTIVE");
-  const completedOpps = wonOpps.filter((o) => o.siteStatus === "COMPLETED");
+  const filteredOpps = search
+    ? wonOpps.filter((o) => (o.leadName ?? "").toLowerCase().includes(search.toLowerCase()))
+    : wonOpps;
+
+  const invoicingOpps = filteredOpps.filter((o) => o.siteStatus === "INVOICING_PENDING");
+  const activeOpps = filteredOpps.filter((o) => o.siteStatus === "ACTIVE");
+  const completedOpps = filteredOpps.filter((o) => o.siteStatus === "COMPLETED");
 
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold">Cantieri</h1>
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            Aggiorna
-          </Button>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Cerca cliente..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 w-52"
+              />
+            </div>
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              Aggiorna
+            </Button>
+          </div>
         </div>
 
         {/* Da fatturare */}
