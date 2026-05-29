@@ -175,7 +175,7 @@ export function LattoneriaForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={submit} className="flex flex-col flex-1 min-h-0">
+      <form onSubmit={submit} className="flex flex-col flex-1 min-h-0" onKeyDown={(e) => { if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault(); }}>
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           <FormField
             control={form.control}

@@ -92,7 +92,7 @@ export function ManualeForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={submit} className="space-y-3" onKeyDown={(e) => { if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault(); }}>
         <FormField
           control={form.control}
           name="description"

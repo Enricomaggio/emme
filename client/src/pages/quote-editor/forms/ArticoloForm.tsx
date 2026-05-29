@@ -128,7 +128,7 @@ export function ArticoloForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={submit} className="flex flex-col flex-1 min-h-0">
+      <form onSubmit={submit} className="flex flex-col flex-1 min-h-0" onKeyDown={(e) => { if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault(); }}>
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           <div className="space-y-1">
             <label className="text-sm font-medium">Famiglia articoli</label>
@@ -185,6 +185,19 @@ export function ArticoloForm({
               </FormItem>
             )}
           />
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Descrizione riga (opzionale)</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Descrizione personalizzata per questo preventivo" data-testid="input-description-articolo" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           {preview && (
             <p className="text-sm text-muted-foreground" data-testid="preview-articolo">
               Costo: <span className="font-medium text-foreground">€ {formatEur(preview.cost)}</span>
@@ -219,19 +232,6 @@ export function ArticoloForm({
                         {...field}
                         data-testid="input-margin-override-articolo"
                       />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrizione (opzionale)</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="input-description-articolo" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
