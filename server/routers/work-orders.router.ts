@@ -257,7 +257,7 @@ workOrdersRouter.post("/opportunities/:id/work-orders/from-quote", isAuthenticat
 // POST /api/work-orders/:id/invoice
 // body: { invoicedAmount: string }
 // Salva invoicedAmount, invoicedAt = now()
-// Imposta siteStatus = "ACTIVE" sull'opportunity (logica SAL completa al Prompt 2)
+// Auto-avanza a COMPLETED se il totale fatturato copre il totale preventivo (residuo = 0)
 workOrdersRouter.post("/work-orders/:id/invoice", isAuthenticated, async (req: any, res) => {
   try {
     const userCtx = await resolveUserCompany(req.user.id, req.user.role, req);
@@ -277,10 +277,24 @@ workOrdersRouter.post("/work-orders/:id/invoice", isAuthenticated, async (req: a
       new Date()
     );
 
+    // Somma tutte le NL fatturate (inclusa quella appena registrata)
+    const allWos = await storage.getWorkOrdersByOpportunity(existingWo.opportunityId, userCtx.companyId);
+    const totalFatturato = allWos.reduce((sum, w) => {
+      if (w.invoicedAt && w.invoicedAmount) return sum + parseFloat(w.invoicedAmount);
+      return sum;
+    }, 0);
+
+    // Somma tutti i preventivi collegati per ottenere il quoteTotal
+    const oppQuotes = await storage.getQuotesByOpportunity(existingWo.opportunityId, userCtx.companyId);
+    const quoteTotal = oppQuotes.reduce((sum, q) => sum + parseFloat(q.totalAmount || "0"), 0);
+
+    // Se il residuo è azzerato, il cantiere passa a COMPLETED; altrimenti torna ACTIVE
+    const newSiteStatus = quoteTotal > 0 && totalFatturato >= quoteTotal ? "COMPLETED" : "ACTIVE";
+
     const opportunity = await storage.updateOpportunity(
       existingWo.opportunityId,
       userCtx.companyId,
-      { siteStatus: "ACTIVE" } as any
+      { siteStatus: newSiteStatus } as any
     );
 
     res.json({ workOrder: wo, opportunity: opportunity ?? null });
