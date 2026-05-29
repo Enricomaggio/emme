@@ -1417,10 +1417,10 @@ export default function OpportunitaPage() {
         description: "L'opportunità è stata eliminata con successo.",
       });
     },
-    onError: (error: Error) => {
+    onError: () => {
       toast({
-        title: "Errore eliminazione",
-        description: error.message,
+        title: "Errore",
+        description: "Impossibile eliminare l'opportunità. Riprova.",
         variant: "destructive",
       });
     },
