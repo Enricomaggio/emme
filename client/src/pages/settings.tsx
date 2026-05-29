@@ -18,6 +18,7 @@ import { it } from "date-fns/locale";
 import { useState, useEffect, useRef } from "react";
 import type { Company, User as UserType, Article } from "@shared/schema";
 import { applyTemplate } from "@/pdf/quote-pdf-utils";
+import { DEFAULT_WO_EMAIL_SUBJECT, DEFAULT_WO_EMAIL_BODY } from "@/pdf/WorkOrderPdfActions";
 
 function NotificationPreferencesSection({ userRole }: { userRole: string }) {
   const { toast } = useToast();
@@ -148,6 +149,9 @@ export default function SettingsPage() {
     quoteFooterNotes: "",
     emailSubjectTemplate: "",
     emailBodyTemplate: "",
+    workOrderDisclaimerText: "",
+    workOrderEmailSubjectTemplate: "",
+    workOrderEmailBodyTemplate: "",
   });
 
   useEffect(() => {
@@ -172,6 +176,9 @@ export default function SettingsPage() {
         quoteFooterNotes: company.quoteFooterNotes || "",
         emailSubjectTemplate: company.emailSubjectTemplate || "",
         emailBodyTemplate: company.emailBodyTemplate || "",
+        workOrderDisclaimerText: company.workOrderDisclaimerText || "",
+        workOrderEmailSubjectTemplate: company.workOrderEmailSubjectTemplate || "",
+        workOrderEmailBodyTemplate: company.workOrderEmailBodyTemplate || "",
       });
     }
   }, [company]);
@@ -803,6 +810,75 @@ export default function SettingsPage() {
                       rows={2}
                       placeholder="Testo libero che appare in fondo a ogni pagina del PDF preventivo"
                     />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t space-y-4">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Nota Lavori
+                  </h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="company-wo-disclaimer">Disclaimer PDF (footer)</Label>
+                    <Textarea
+                      id="company-wo-disclaimer"
+                      data-testid="input-company-wo-disclaimer"
+                      value={companyForm.workOrderDisclaimerText}
+                      onChange={(e) => handleCompanyChange("workOrderDisclaimerText", e.target.value)}
+                      rows={2}
+                      placeholder="Salvo contestazioni scritte entro 10 giorni dal ricevimento, la presente nota lavori si intende accettata e sarà emessa regolare fattura."
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Appare in corsivo in fondo al PDF. Se vuoto viene usato il testo predefinito.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4 pt-2">
+                    <p className="text-xs text-muted-foreground">
+                      Placeholder disponibili: <code>{`{numero}`}</code>, <code>{`{cantiere}`}</code>,{" "}
+                      <code>{`{cliente}`}</code>, <code>{`{mittente}`}</code>
+                    </p>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="company-wo-email-subject">Oggetto email NL</Label>
+                          <Input
+                            id="company-wo-email-subject"
+                            data-testid="input-company-wo-email-subject"
+                            value={companyForm.workOrderEmailSubjectTemplate}
+                            onChange={(e) => handleCompanyChange("workOrderEmailSubjectTemplate", e.target.value)}
+                            placeholder={DEFAULT_WO_EMAIL_SUBJECT}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="company-wo-email-body">Corpo email NL</Label>
+                          <Textarea
+                            id="company-wo-email-body"
+                            data-testid="input-company-wo-email-body"
+                            value={companyForm.workOrderEmailBodyTemplate}
+                            onChange={(e) => handleCompanyChange("workOrderEmailBodyTemplate", e.target.value)}
+                            rows={10}
+                            placeholder={DEFAULT_WO_EMAIL_BODY}
+                          />
+                        </div>
+                      </div>
+                      <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                        <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Anteprima
+                        </Label>
+                        <p className="text-sm font-medium break-words">
+                          {applyTemplate(
+                            companyForm.workOrderEmailSubjectTemplate || DEFAULT_WO_EMAIL_SUBJECT,
+                            { numero: "NL-2026-001", cantiere: "Via Roma 12, Treviso", cliente: "Mario Rossi", mittente: "Luca Bianchi" }
+                          )}
+                        </p>
+                        <pre className="text-xs mt-1 whitespace-pre-wrap break-words font-sans text-muted-foreground">
+                          {applyTemplate(
+                            companyForm.workOrderEmailBodyTemplate || DEFAULT_WO_EMAIL_BODY,
+                            { numero: "NL-2026-001", cantiere: "Via Roma 12, Treviso", cliente: "Mario Rossi", mittente: "Luca Bianchi" }
+                          )}
+                        </pre>
+                      </div>
+                    </div>
                   </div>
                 </div>
 

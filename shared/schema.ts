@@ -31,6 +31,9 @@ export const companies = pgTable("companies", {
   quoteFooterNotes: text("quote_footer_notes"),
   emailSubjectTemplate: text("email_subject_template"),
   emailBodyTemplate: text("email_body_template"),
+  workOrderDisclaimerText: text("work_order_disclaimer_text"),
+  workOrderEmailSubjectTemplate: text("work_order_email_subject_template"),
+  workOrderEmailBodyTemplate: text("work_order_email_body_template"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

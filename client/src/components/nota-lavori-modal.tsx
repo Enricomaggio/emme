@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { pdf } from "@react-pdf/renderer";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -18,12 +17,11 @@ import {
   FileCheck,
   Plus,
   Trash2,
-  Download,
   Save,
   ClipboardList,
 } from "lucide-react";
-import type { WorkOrderWithItems, Quote, Company } from "@shared/schema";
-import { WorkOrderPdfDocument } from "@/pdf/WorkOrderPdfDocument";
+import type { WorkOrderWithItems, Quote } from "@shared/schema";
+import { WorkOrderPdfActions } from "@/pdf/WorkOrderPdfActions";
 
 interface Props {
   opportunityId: string;
@@ -106,17 +104,11 @@ export function NotaLavoriModal({
     enabled: open && wo === null,
   });
 
-  const { data: company } = useQuery<Company>({
-    queryKey: ["/api/company"],
-    enabled: open,
-  });
-
   // ── Local editable state ─────────────────────────────────────────────────────
   const [subject, setSubject] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<LocalItem[]>([]);
   const [isDirty, setIsDirty] = useState(false);
-  const [pdfGenerating, setPdfGenerating] = useState(false);
 
   // Sync local state when WO loads or modal opens
   useEffect(() => {
@@ -263,52 +255,6 @@ export function NotaLavoriModal({
       totalAmount: subtotale.toFixed(2),
       items: items.map(({ _key, ...rest }, i) => ({ ...rest, displayOrder: i })),
     });
-  };
-
-  // ── PDF download ─────────────────────────────────────────────────────────────
-  const handleDownloadPdf = async () => {
-    if (!wo || !company) return;
-
-    // Build a "live" work order with current local state for the PDF
-    const liveWo: WorkOrderWithItems = {
-      ...wo,
-      subject: subject || null,
-      notes: notes || null,
-      totalAmount: subtotale.toFixed(2),
-      items: items.map(({ _key, ...rest }, i) => ({
-        id: newKey(),
-        workOrderId: wo.id,
-        createdAt: new Date(),
-        ...rest,
-        displayOrder: i,
-      })),
-    };
-
-    setPdfGenerating(true);
-    try {
-      const blob = await pdf(
-        <WorkOrderPdfDocument
-          company={company}
-          workOrder={liveWo}
-          opportunityTitle={opportunityTitle}
-        />
-      ).toBlob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `NL-${wo.number}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error("PDF error:", e);
-      toast({
-        title: "Errore PDF",
-        description: "Impossibile generare il PDF",
-        variant: "destructive",
-      });
-    } finally {
-      setPdfGenerating(false);
-    }
   };
 
   // ── Derived ──────────────────────────────────────────────────────────────────
@@ -596,18 +542,15 @@ export function NotaLavoriModal({
 
           {wo && (
             <>
-              <Button
-                variant="outline"
-                onClick={handleDownloadPdf}
-                disabled={pdfGenerating || !company}
-              >
-                {pdfGenerating ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4 mr-2" />
-                )}
-                Scarica PDF
-              </Button>
+              <WorkOrderPdfActions
+                workOrderId={wo.id}
+                workOrder={wo}
+                status={wo.status}
+                opportunityId={wo.opportunityId}
+                onSent={() => {
+                  queryClient.invalidateQueries({ queryKey: woQueryKey });
+                }}
+              />
 
               <Button
                 onClick={handleSave}

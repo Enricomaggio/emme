@@ -1,7 +1,7 @@
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import type { Company, WorkOrderWithItems } from "@shared/schema";
+import type { Company } from "@shared/schema";
 import { fmt } from "./quote-pdf-utils";
 
 const COLORS = {
@@ -150,6 +150,16 @@ const styles = StyleSheet.create({
   },
   grandTotalLabel: { fontSize: 11, fontFamily: "Helvetica-Bold" },
   grandTotalValue: { fontSize: 13, fontFamily: "Helvetica-Bold", textAlign: "right" },
+  disclaimer: {
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    fontSize: 7.5,
+    color: COLORS.muted,
+    fontFamily: "Helvetica-Oblique",
+    lineHeight: 1.5,
+  },
   footer: {
     position: "absolute",
     bottom: 24,
@@ -168,6 +178,9 @@ const styles = StyleSheet.create({
   },
 });
 
+export const DEFAULT_WO_DISCLAIMER =
+  "Salvo contestazioni scritte entro 10 giorni dal ricevimento, la presente nota lavori si intende accettata e sarà emessa regolare fattura.";
+
 function safeDate(d: string | Date | undefined | null): string {
   if (!d) return format(new Date(), "dd MMMM yyyy", { locale: it });
   try {
@@ -178,11 +191,30 @@ function safeDate(d: string | Date | undefined | null): string {
   }
 }
 
+export interface WorkOrderPdfItem {
+  id: string;
+  description: string;
+  unitOfMeasure: string;
+  quantity: string;
+  unitPrice: string;
+  totalRow: string;
+  displayOrder: number;
+}
+
+export interface WorkOrderPdfData {
+  number: string;
+  subject?: string | null;
+  notes?: string | null;
+  createdAt?: string | Date | null;
+  items: WorkOrderPdfItem[];
+}
+
 interface WorkOrderPdfProps {
   company: Company;
-  workOrder: WorkOrderWithItems;
+  workOrder: WorkOrderPdfData;
   opportunityTitle?: string | null;
   customerName?: string | null;
+  disclaimerText?: string | null;
 }
 
 export const WorkOrderPdfDocument = ({
@@ -190,6 +222,7 @@ export const WorkOrderPdfDocument = ({
   workOrder,
   opportunityTitle,
   customerName,
+  disclaimerText,
 }: WorkOrderPdfProps) => {
   const companyInitial = (company.name || "G").charAt(0).toUpperCase();
   const subtotale = workOrder.items.reduce(
@@ -199,6 +232,13 @@ export const WorkOrderPdfDocument = ({
   const vatPercent = 22;
   const iva = (subtotale * vatPercent) / 100;
   const totale = subtotale + iva;
+
+  // When explicitly passed: use it (even if empty string = no disclaimer).
+  // Otherwise fall back to the company's setting, then to the hard-coded default.
+  const effectiveDisclaimer =
+    disclaimerText !== undefined
+      ? disclaimerText
+      : (company.workOrderDisclaimerText ?? DEFAULT_WO_DISCLAIMER);
 
   return (
     <Document title={`Nota Lavori ${workOrder.number}`} author={company.name || "GDM"}>
@@ -327,6 +367,13 @@ export const WorkOrderPdfDocument = ({
           </View>
         )}
 
+        {/* Disclaimer */}
+        {effectiveDisclaimer ? (
+          <Text style={styles.disclaimer} wrap={false}>
+            {effectiveDisclaimer}
+          </Text>
+        ) : null}
+
         {/* Footer fisso */}
         <View fixed style={styles.footer}>
           <View style={styles.footerRow}>
@@ -345,9 +392,6 @@ export const WorkOrderPdfDocument = ({
               }
             />
           </View>
-          {company.quoteFooterNotes ? (
-            <Text>{company.quoteFooterNotes}</Text>
-          ) : null}
         </View>
       </Page>
     </Document>

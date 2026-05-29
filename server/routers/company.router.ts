@@ -211,6 +211,9 @@ const updateCompanyHandler = async (req: any, res: any) => {
       quoteFooterNotes: z.string().optional(),
       emailSubjectTemplate: z.string().optional(),
       emailBodyTemplate: z.string().optional(),
+      workOrderDisclaimerText: z.string().optional(),
+      workOrderEmailSubjectTemplate: z.string().optional(),
+      workOrderEmailBodyTemplate: z.string().optional(),
     });
 
     const validatedData = updateCompanySchema.parse(req.body);

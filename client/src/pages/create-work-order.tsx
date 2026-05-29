@@ -8,16 +8,41 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Loader2, ChevronLeft } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, ChevronLeft, Eye, Download, Mail, X } from "lucide-react";
+import { pdf, PDFViewer } from "@react-pdf/renderer";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import type { Company } from "@shared/schema";
+import { WorkOrderPdfDocument, DEFAULT_WO_DISCLAIMER } from "@/pdf/WorkOrderPdfDocument";
+import { WorkOrderPdfActions } from "@/pdf/WorkOrderPdfActions";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface OpportunityDetail {
   id: string;
   title: string;
+  leadId: string;
   leadName: string | null;
+}
+
+interface CreatedWorkOrder {
+  id: string;
+  number: string;
+  status: string;
+  opportunityId: string;
+  subject: string | null;
+  notes: string | null;
+  createdAt: Date | string;
+  items: Array<{
+    id: string;
+    description: string;
+    unitOfMeasure: string;
+    quantity: string;
+    unitPrice: string;
+    totalRow: string;
+    displayOrder: number;
+  }>;
 }
 
 interface QuoteListItem {
@@ -101,6 +126,9 @@ export default function CreateWorkOrderPage() {
   // Step logic: 1 = quote selection, 2 = row selection
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string>("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [createdWo, setCreatedWo] = useState<CreatedWorkOrder | null>(null);
 
   // Row wizard states keyed by quoteItemId
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
@@ -119,6 +147,10 @@ export default function CreateWorkOrderPage() {
   const { data: sal, isLoading: salLoading } = useQuery<SalResponse>({
     queryKey: ["/api/opportunities", opportunityId, "sal"],
     enabled: !!opportunityId,
+  });
+
+  const { data: company } = useQuery<Company>({
+    queryKey: ["/api/company"],
   });
 
   const isLoading = salLoading || !quotesLoaded;
@@ -151,12 +183,13 @@ export default function CreateWorkOrderPage() {
   // Mutation
   const mutation = useMutation({
     mutationFn: (payload: { quoteId: string; items: unknown[] }) =>
-      apiRequest("POST", `/api/opportunities/${opportunityId}/work-orders/from-quote`, payload),
-    onSuccess: () => {
+      apiRequest("POST", `/api/opportunities/${opportunityId}/work-orders/from-quote`, payload)
+        .then((r) => r.json() as Promise<CreatedWorkOrder>),
+    onSuccess: (data: CreatedWorkOrder) => {
       queryClient.invalidateQueries({ queryKey: ["/api/opportunities?won=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders?companyScope=all"] });
       toast({ title: "Nota Lavori creata" });
-      window.location.href = "/cantieri";
+      setCreatedWo(data);
     },
     onError: (err: Error) => {
       toast({ title: "Errore nella creazione", description: err.message, variant: "destructive" });
@@ -184,6 +217,75 @@ export default function CreateWorkOrderPage() {
       ...prev,
       [id]: { ...prev[id], included: checked },
     }));
+  }
+
+  function buildPreviewItems() {
+    if (!sal) return [];
+    return sal.rows
+      .filter(row => rowStates[row.quoteItemId]?.included)
+      .map((row, i) => ({
+        id: row.quoteItemId,
+        description: row.description,
+        unitOfMeasure: row.unitOfMeasure,
+        quantity: rowStates[row.quoteItemId]?.qty ?? "0",
+        unitPrice: row.unitPrice,
+        totalRow: rowStates[row.quoteItemId]?.amount ?? "0",
+        displayOrder: i,
+      }));
+  }
+
+  function buildPreviewWorkOrder() {
+    return {
+      number: "BOZZA",
+      subject: opportunity?.title ?? null,
+      notes: null,
+      createdAt: new Date(),
+      items: buildPreviewItems(),
+    };
+  }
+
+  async function handleDownloadPreview() {
+    if (!company) return;
+    try {
+      setDownloading(true);
+      const resolvedCompany = { ...company, logoUrl: company.logoUrl || `${window.location.origin}/gdm-logo.png` };
+      const blob = await pdf(
+        <WorkOrderPdfDocument
+          company={resolvedCompany}
+          workOrder={buildPreviewWorkOrder()}
+          opportunityTitle={opportunity?.title ?? null}
+          customerName={opportunity?.leadName ?? null}
+          disclaimerText={company.workOrderDisclaimerText || DEFAULT_WO_DISCLAIMER}
+        />
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `NotaLavori-${opportunity?.title ?? "bozza"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err) {
+      toast({ title: "Errore generazione PDF", description: String(err), variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  function handleOpenEmail() {
+    const disclaimer = company?.workOrderDisclaimerText || DEFAULT_WO_DISCLAIMER;
+    const items = buildPreviewItems();
+    const itemsText = items
+      .map(it => `- ${it.description} (${it.unitOfMeasure}): ${formatEuro(it.totalRow)}`)
+      .join("\n");
+    const subject = encodeURIComponent(`Nota Lavori — ${opportunity?.title ?? ""}`);
+    const body = encodeURIComponent(
+      `Gentile Cliente,\n\nIn allegato trovate la Nota Lavori relativa a:\n${opportunity?.title ?? ""}\n\n` +
+      (itemsText ? `Voci:\n${itemsText}\n\n` : "") +
+      `Totale: ${formatEuro(totalNL)}\n\n${disclaimer}\n\nCordiali saluti,\n${company?.name ?? ""}`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
   }
 
   function handleSubmit() {
@@ -246,8 +348,43 @@ export default function CreateWorkOrderPage() {
           </div>
         )}
 
+        {/* Step 3: NL created — show Invia / Vai ai cantieri */}
+        {createdWo && (
+          <div className="rounded-lg border p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-semibold">Nota Lavori {createdWo.number} creata</p>
+                <p className="text-sm text-muted-foreground">
+                  Puoi inviarla ora oppure farlo in seguito dalla pagina Cantieri.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t">
+              <Button
+                variant="outline"
+                onClick={() => { window.location.href = "/cantieri"; }}
+              >
+                Vai ai Cantieri
+              </Button>
+              <WorkOrderPdfActions
+                workOrderId={createdWo.id}
+                workOrder={createdWo}
+                status={createdWo.status}
+                opportunityId={opportunityId}
+                onSent={() => { window.location.href = "/cantieri"; }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Step 1: Quote selection (only if multiple quotes) */}
-        {!isLoading && step === 1 && quotes.length > 1 && (
+        {!createdWo && !isLoading && step === 1 && quotes.length > 1 && (
           <div className="rounded-lg border p-5 space-y-4">
             <h2 className="text-base font-semibold">Seleziona il preventivo di riferimento</h2>
             <RadioGroup
@@ -275,7 +412,7 @@ export default function CreateWorkOrderPage() {
         )}
 
         {/* Step 2: Row selection */}
-        {!isLoading && step === 2 && sal && (
+        {!createdWo && !isLoading && step === 2 && sal && (
           <>
             {sal.rows.length === 0 ? (
               <div className="rounded-lg border p-6 text-center text-muted-foreground">
@@ -412,14 +549,73 @@ export default function CreateWorkOrderPage() {
               <Button variant="outline" onClick={() => window.history.back()}>
                 Annulla
               </Button>
-              <Button
-                onClick={handleSubmit}
-                disabled={includedCount === 0 || totalNL <= 0 || mutation.isPending || !selectedQuoteId}
-              >
-                {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Crea Nota Lavori
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setPreviewOpen(true)}
+                  disabled={includedCount === 0 || !company}
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Anteprima PDF
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={includedCount === 0 || totalNL <= 0 || mutation.isPending || !selectedQuoteId}
+                >
+                  {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Crea Nota Lavori
+                </Button>
+              </div>
             </div>
+
+            {/* PDF preview dialog */}
+            <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+              <DialogContent className="max-w-6xl w-[95vw] h-[92vh] flex flex-col p-0">
+                <DialogHeader className="px-4 pt-4 pb-2 flex flex-row items-center justify-between">
+                  <DialogTitle>Anteprima Nota Lavori (bozza)</DialogTitle>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadPreview}
+                      disabled={downloading}
+                    >
+                      {downloading ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4 mr-2" />
+                      )}
+                      Scarica
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleOpenEmail}>
+                      <Mail className="h-4 w-4 mr-2" />
+                      Invia email
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setPreviewOpen(false)}>
+                      <X className="h-4 w-4 mr-2" />
+                      Chiudi
+                    </Button>
+                  </div>
+                </DialogHeader>
+                <div className="flex-1 px-4 pb-4">
+                  {company ? (
+                    <PDFViewer style={{ width: "100%", height: "100%", border: "none" }}>
+                      <WorkOrderPdfDocument
+                        company={{ ...company, logoUrl: company.logoUrl || `${window.location.origin}/gdm-logo.png` }}
+                        workOrder={buildPreviewWorkOrder()}
+                        opportunityTitle={opportunity?.title ?? null}
+                        customerName={opportunity?.leadName ?? null}
+                        disclaimerText={company.workOrderDisclaimerText || DEFAULT_WO_DISCLAIMER}
+                      />
+                    </PDFViewer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
           </>
         )}
       </div>
