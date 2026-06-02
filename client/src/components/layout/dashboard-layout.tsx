@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   LayoutDashboard,
   Users,
@@ -61,7 +62,7 @@ function ReminderBadge() {
   const count = reminders?.length || 0;
   if (!count) return null;
   return (
-    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white px-1">
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white px-1 shadow-[0_0_10px_rgba(239,68,68,0.5)]">
       {count > 99 ? "99+" : count}
     </span>
   );
@@ -135,34 +136,42 @@ export function DashboardLayout({ children, user, fullWidth = false }: Dashboard
 
         <aside
           className={cn(
-            "fixed top-0 left-0 z-50 h-full w-64 bg-sidebar border-r border-sidebar-border transition-all duration-300 lg:translate-x-0",
+            "fixed top-0 left-0 z-50 h-full w-64 bg-gradient-to-b from-[#020617] to-[#0a1628] border-r border-white/[0.06] transition-all duration-300 lg:translate-x-0",
             sidebarOpen ? "translate-x-0" : "-translate-x-full",
             collapsed ? "lg:w-16" : "lg:w-64",
           )}
         >
           <div className="flex flex-col h-full">
             <div className={cn(
-              "flex items-center border-b border-sidebar-border",
+              "flex items-center border-b border-white/[0.06]",
               isDesktopCollapsed ? "justify-center p-3" : "justify-between p-4",
             )}>
               <div className="flex items-center gap-2">
                 <img
                   src="/emme-logo.png"
                   alt={APP_CONFIG.appName}
-                  className={cn(isDesktopCollapsed ? "h-10 w-10 object-contain" : "h-10 w-auto object-contain")}
+                  className={cn(
+                    "text-glow-blue",
+                    isDesktopCollapsed ? "h-10 w-10 object-contain" : "h-10 w-auto object-contain",
+                  )}
                   onError={(e) => {
                     // Fallback testuale finché non c'è il file logo
                     (e.target as HTMLImageElement).style.display = "none";
                   }}
                 />
                 {!isDesktopCollapsed && (
-                  <span className="text-xl font-bold text-sidebar-foreground tracking-tight">{APP_CONFIG.appName}</span>
+                  <span
+                    className="text-xl font-bold text-white tracking-tight"
+                    style={{ filter: "drop-shadow(0 0 8px rgba(59,130,246,0.4))" }}
+                  >
+                    {APP_CONFIG.appName}
+                  </span>
                 )}
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden text-sidebar-foreground"
+                className="lg:hidden text-sidebar-foreground hover:bg-white/[0.04]"
                 onClick={() => setSidebarOpen(false)}
               >
                 <X className="w-5 h-5" />
@@ -178,14 +187,14 @@ export function DashboardLayout({ children, user, fullWidth = false }: Dashboard
                 const navContent = (
                   <div
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 cursor-pointer",
                       isDesktopCollapsed && "justify-center px-2",
                       isActive
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                        ? "bg-blue-500/10 border-l-2 border-blue-500 text-white shadow-[0_0_12px_rgba(59,130,246,0.08)]"
+                        : "text-slate-400 hover:bg-white/[0.04] hover:text-white",
                     )}
                   >
-                    <item.icon className="w-5 h-5 shrink-0" />
+                    <item.icon className={cn("w-5 h-5 shrink-0", isActive && "text-blue-400")} />
                     {!isDesktopCollapsed && <span className="tracking-wide">{item.label}</span>}
                     {!isDesktopCollapsed && item.href === "/dashboard" && <ReminderBadge />}
                   </div>
@@ -210,7 +219,7 @@ export function DashboardLayout({ children, user, fullWidth = false }: Dashboard
               })}
             </nav>
 
-            <div className={cn("border-t border-sidebar-border", isDesktopCollapsed ? "p-2" : "p-4")}>
+            <div className={cn("border-t border-white/[0.06]", isDesktopCollapsed ? "p-2" : "p-4")}>
               {isDesktopCollapsed ? (
                 <div className="flex flex-col items-center gap-2">
                   <Tooltip>
@@ -218,7 +227,7 @@ export function DashboardLayout({ children, user, fullWidth = false }: Dashboard
                       <div className="flex items-center justify-center w-full p-2 rounded-md cursor-default">
                         <Avatar className="w-8 h-8">
                           <AvatarImage src={user?.profileImageUrl || undefined} alt={userName} />
-                          <AvatarFallback className="text-xs bg-sidebar-primary text-sidebar-primary-foreground">
+                          <AvatarFallback className="text-xs bg-blue-600 text-white">
                             {userInitials}
                           </AvatarFallback>
                         </Avatar>
@@ -229,7 +238,7 @@ export function DashboardLayout({ children, user, fullWidth = false }: Dashboard
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
-                        className="flex items-center justify-center w-full p-2 rounded-md hover:bg-sidebar-accent/50 transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                        className="flex items-center justify-center w-full p-2 rounded-md hover:bg-white/[0.04] transition-all duration-150 text-slate-400 hover:text-white"
                         onClick={handleLogout}
                       >
                         <LogOut className="w-5 h-5" />
@@ -241,16 +250,16 @@ export function DashboardLayout({ children, user, fullWidth = false }: Dashboard
               ) : (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-3 w-full p-2 rounded-md hover:bg-sidebar-accent/50 transition-colors">
+                    <button className="flex items-center gap-3 w-full p-2 rounded-md hover:bg-white/[0.04] transition-all duration-150">
                       <Avatar className="w-8 h-8">
                         <AvatarImage src={user?.profileImageUrl || undefined} alt={userName} />
-                        <AvatarFallback className="text-xs bg-sidebar-primary text-sidebar-primary-foreground">
+                        <AvatarFallback className="text-xs bg-blue-600 text-white">
                           {userInitials}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex flex-col items-start text-left flex-1 min-w-0">
-                        <span className="text-sm font-medium text-sidebar-foreground truncate w-full">{userName}</span>
-                        <span className="text-xs text-sidebar-foreground/60 truncate w-full">Admin</span>
+                        <span className="text-sm font-medium text-white truncate w-full">{userName}</span>
+                        <span className="text-xs text-slate-500 truncate w-full">Admin</span>
                       </div>
                     </button>
                   </DropdownMenuTrigger>
@@ -273,7 +282,7 @@ export function DashboardLayout({ children, user, fullWidth = false }: Dashboard
           </div>
 
           <button
-            className="hidden lg:flex absolute top-1/2 -right-3 -translate-y-1/2 z-10 items-center justify-center w-6 h-6 rounded-full bg-sidebar border border-sidebar-border text-sidebar-foreground/70 hover:text-sidebar-foreground shadow-sm transition-colors"
+            className="hidden lg:flex absolute top-1/2 -right-3 -translate-y-1/2 z-10 items-center justify-center w-6 h-6 rounded-full bg-slate-900 border border-white/[0.08] text-slate-400 hover:text-white shadow-[0_0_10px_rgba(59,130,246,0.15)] transition-all duration-150"
             onClick={toggleCollapsed}
             aria-label={collapsed ? "Espandi sidebar" : "Comprimi sidebar"}
           >
@@ -282,19 +291,31 @@ export function DashboardLayout({ children, user, fullWidth = false }: Dashboard
         </aside>
 
         <div className={cn("transition-all duration-300", collapsed ? "lg:pl-16" : "lg:pl-64")}>
-          <header className="sticky top-0 z-30 flex items-center h-12 px-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:hidden">
+          <header className="sticky top-0 z-30 flex items-center h-12 px-4 border-b border-white/[0.06] bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 lg:hidden">
             <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
               <Menu className="w-5 h-5" />
             </Button>
             <div className="flex-1" />
             <Avatar className="w-8 h-8">
               <AvatarImage src={user?.profileImageUrl || undefined} alt={userName} />
-              <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
+              <AvatarFallback className="text-xs bg-blue-600 text-white">{userInitials}</AvatarFallback>
             </Avatar>
           </header>
 
           <main className="p-4 sm:p-6 lg:p-8">
-            <div className={cn("mx-auto", fullWidth ? "w-full" : "max-w-7xl")}>{children}</div>
+            <div className={cn("mx-auto", fullWidth ? "w-full" : "max-w-7xl")}>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={location}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                >
+                  {children}
+                </motion.div>
+              </AnimatePresence>
+            </div>
           </main>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import {
   DndContext,
   DragEndEvent,
@@ -108,12 +109,15 @@ export default function OpportunitaPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Target className="w-6 h-6" /> Pipeline
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-white tracking-tight">
+              <Target className="w-6 h-6 text-blue-400" /> Pipeline
             </h1>
-            <p className="text-sm text-muted-foreground">{opps.length} opportunità</p>
+            <p className="text-sm text-slate-400">{opps.length} opportunità</p>
           </div>
-          <Button onClick={() => setOpenCreate(true)}>
+          <Button
+            onClick={() => setOpenCreate(true)}
+            className="bg-blue-600 hover:bg-blue-700 active:scale-[0.98] hover:shadow-[0_0_16px_rgba(59,130,246,0.3)] transition-all duration-150 text-white"
+          >
             <Plus className="w-4 h-4 mr-1" /> Nuova opportunità
           </Button>
         </div>
@@ -191,29 +195,40 @@ function Column({
     <div
       ref={setNodeRef}
       className={cn(
-        "shrink-0 w-72 bg-muted/40 rounded-lg p-2 flex flex-col gap-2",
-        isOver && "ring-2 ring-primary",
+        "shrink-0 w-72 bg-white/[0.02] border border-white/[0.05] rounded-xl p-3 flex flex-col gap-2 transition-all duration-200",
+        isOver && "border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.15)] bg-blue-500/[0.03]",
       )}
     >
-      <div className="flex items-center justify-between px-2 py-1">
+      <div className="flex items-center justify-between px-1 py-1">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
-          <span className="font-medium text-sm">{stage.name}</span>
-          <Badge variant="secondary" className="text-xs">{opps.length}</Badge>
+          <span
+            className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]"
+            style={{ background: stage.color, color: stage.color }}
+          />
+          <span className="font-medium text-sm text-slate-200">{stage.name}</span>
+          <Badge variant="secondary" className="text-xs bg-white/[0.05] text-slate-300 border-white/[0.06]">
+            {opps.length}
+          </Badge>
         </div>
         {total > 0 && (
-          <span className="text-xs text-muted-foreground">€ {formatCurrency(total)}</span>
+          <span className="text-xs text-slate-400 tabular-nums">€ {formatCurrency(total)}</span>
         )}
       </div>
       <div className="space-y-2 min-h-[100px]">
-        {opps.map((o) => (
-          <OppCard
+        {opps.map((o, i) => (
+          <motion.div
             key={o.id}
-            opp={o}
-            leadName={leadNameOf(o.leadId)}
-            stageColor={stage.color}
-            onClick={() => onCardClick(o.id)}
-          />
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: i * 0.04, ease: "easeOut" }}
+          >
+            <OppCard
+              opp={o}
+              leadName={leadNameOf(o.leadId)}
+              stageColor={stage.color}
+              onClick={() => onCardClick(o.id)}
+            />
+          </motion.div>
         ))}
       </div>
     </div>
@@ -246,30 +261,31 @@ function OppCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "cursor-pointer hover:bg-accent",
-        (isDragging || dragging) && "opacity-60 ring-2 ring-primary shadow-lg",
+        "cursor-pointer bg-slate-900/80 border border-white/[0.08] backdrop-blur-sm rounded-lg transition-all duration-200",
+        "hover:border-blue-500/30 hover:shadow-[0_0_15px_rgba(59,130,246,0.08)] hover:bg-slate-900",
+        (isDragging || dragging) && "opacity-60 border-blue-500/60 shadow-[0_0_24px_rgba(59,130,246,0.25)]",
       )}
       onClick={onClick}
     >
       <CardContent className="p-3 space-y-1">
         <div className="flex items-start justify-between gap-2">
-          <p className="font-medium text-sm leading-tight">{opp.title}</p>
+          <p className="font-medium text-sm leading-tight text-white">{opp.title}</p>
           <button
             {...attributes}
             {...listeners}
             onClick={(e) => e.stopPropagation()}
-            className="text-muted-foreground hover:text-foreground touch-none cursor-grab"
+            className="text-slate-500 hover:text-slate-300 touch-none cursor-grab transition-colors"
             aria-label="Trascina"
           >
             ⋮⋮
           </button>
         </div>
-        <p className="text-xs text-muted-foreground line-clamp-1">{leadName}</p>
+        <p className="text-xs text-slate-400 line-clamp-1">{leadName}</p>
         {opp.value && (
-          <p className="text-sm font-semibold">€ {formatCurrency(parseFloat(opp.value))}</p>
+          <p className="text-sm font-semibold tabular-nums text-slate-200">€ {formatCurrency(parseFloat(opp.value))}</p>
         )}
         {parseFloat(opp.invoicedAmount || "0") > 0 && (
-          <p className="text-xs text-emerald-600">
+          <p className="text-xs text-emerald-400 tabular-nums">
             Fatturato: € {formatCurrency(parseFloat(opp.invoicedAmount))}
           </p>
         )}
