@@ -1,35 +1,19 @@
-// ============ Shared types (re-exported for consumers) ============
-export type { AccessContext, CompanyWithUserCount, BulkUpdateParams } from "./types";
-
-// ============ Domain storage modules ============
-
-import { companiesStorage } from "./companies";
 import { leadsStorage } from "./leads";
 import { pipelineStorage } from "./pipeline";
-import { usersStorage } from "./users";
-import { catalogStorage } from "./catalog";
-import { quotesStorage } from "./quotes";
-import { settingsStorage } from "./settings";
+import { milestonesStorage } from "./milestones";
+import { contactReferentsStorage } from "./contactReferents";
+import { remindersStorage } from "./reminders";
 import { notificationsStorage } from "./notifications";
-import { analyticsStorage } from "./analytics";
-import { workOrdersStorage } from "./workOrders";
-
-// ============ Aggregated storage object ============
-// Spread order: later domains override earlier ones for any accidental name collision.
-// All consumers import { storage } from "../storage" — TypeScript resolves that path
-// to this index.ts automatically, so zero changes needed in routers.
+import { usersStorage } from "./users";
 
 export const storage = {
-  ...companiesStorage,
   ...leadsStorage,
   ...pipelineStorage,
-  ...usersStorage,
-  ...catalogStorage,
-  ...quotesStorage,
-  ...settingsStorage,
+  ...milestonesStorage,
+  ...contactReferentsStorage,
+  ...remindersStorage,
   ...notificationsStorage,
-  ...analyticsStorage,
-  ...workOrdersStorage,
+  ...usersStorage,
 };
 
 export type IStorage = typeof storage;

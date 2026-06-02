@@ -6,3 +6,10 @@ vite.config.ts.*
 *.tar.gzpreventivi.csv
 cantiere_status.csv
 update-cantiere-status.js
+
+# Claude Code local state
+.claude/worktrees/
+
+# Env
+.env
+.env.local

@@ -1,7 +1,6 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef, useMemo } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from "react";
 
-// Tipi per i ruoli utente
-export type UserRole = "SUPER_ADMIN" | "COMPANY_ADMIN" | "SALES_AGENT" | "TECHNICIAN";
+export type UserRole = "ADMIN";
 
 interface User {
   id: string;
@@ -20,7 +19,6 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<any>;
-  register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   setAuth: (token: string, user: User) => void;
   updateUser: (updates: Partial<User>) => void;
   logout: () => void;
@@ -28,7 +26,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const TOKEN_KEY = "platform_one_token";
+const TOKEN_KEY = "emme_token";
 
 let tokenRef: string | null = localStorage.getItem(TOKEN_KEY);
 
@@ -38,11 +36,8 @@ export function getAuthToken(): string | null {
 
 function setStoredToken(newToken: string | null) {
   tokenRef = newToken;
-  if (newToken) {
-    localStorage.setItem(TOKEN_KEY, newToken);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
-  }
+  if (newToken) localStorage.setItem(TOKEN_KEY, newToken);
+  else localStorage.removeItem(TOKEN_KEY);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -53,11 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUser = useCallback(async (authToken: string) => {
     try {
       const response = await fetch("/api/me", {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
+        headers: { Authorization: `Bearer ${authToken}` },
       });
-      
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
@@ -86,19 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchUser]);
 
-  // Sync auth state across browser tabs: when another tab logs in/out it
-  // mutates localStorage, which fires a `storage` event in this tab.
   useEffect(() => {
     function handleStorage(e: StorageEvent) {
       if (e.key !== TOKEN_KEY) return;
       const newToken = e.newValue;
       tokenRef = newToken;
       setToken(newToken);
-      if (newToken) {
-        fetchUser(newToken);
-      } else {
-        setUser(null);
-      }
+      if (newToken) fetchUser(newToken);
+      else setUser(null);
     }
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
@@ -111,32 +98,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ email, password }),
     });
     const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.message || "Errore nel login");
-    }
-    
+    if (!response.ok) throw new Error(data.message || "Errore nel login");
     setStoredToken(data.token);
     setToken(data.token);
     setUser(data.user);
     return data.user;
-  }
-
-  async function register(email: string, password: string, firstName: string, lastName: string) {
-    const response = await fetch("/api/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, firstName, lastName }),
-    });
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.message || "Errore nella registrazione");
-    }
-    
-    setStoredToken(data.token);
-    setToken(data.token);
-    setUser(data.user);
   }
 
   function logout() {
@@ -152,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function updateUser(updates: Partial<User>) {
-    setUser(prev => prev ? { ...prev, ...updates } : prev);
+    setUser((prev) => (prev ? { ...prev, ...updates } : prev));
   }
 
   return (
@@ -163,7 +129,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
-        register,
         setAuth,
         updateUser,
         logout,
@@ -176,62 +141,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 }
 
-// Hook per verificare i permessi basati sul ruolo
+// Per compatibilità con i componenti che chiamano usePermission()
+// — in EMME esiste un solo ruolo ADMIN, tutto è permesso.
 export function usePermission() {
   const { user } = useAuth();
-  
-  const role = user?.role || null;
-  
-  const permissions = useMemo(() => {
-    if (!role) {
-      return {
-        isSuperAdmin: false,
-        isCompanyAdmin: false,
-        isSalesAgent: false,
-        isTechnician: false,
-        isAdmin: false,
-        canAccessLeads: false,
-        canAccessSettings: false,
-        canManageUsers: false,
-        canViewAllCompanies: false,
-      };
-    }
-    
-    const isSuperAdmin = role === "SUPER_ADMIN";
-    const isCompanyAdmin = role === "COMPANY_ADMIN";
-    const isSalesAgent = role === "SALES_AGENT";
-    const isTechnician = role === "TECHNICIAN";
-    
-    return {
-      // Ruoli base
-      isSuperAdmin,
-      isCompanyAdmin,
-      isSalesAgent,
-      isTechnician,
-      
-      // Permessi aggregati
-      isAdmin: isSuperAdmin || isCompanyAdmin,
-      canAccessLeads: isSuperAdmin || isCompanyAdmin || isSalesAgent,
-      canAccessSettings: isSuperAdmin || isCompanyAdmin,
-      canManageUsers: isSuperAdmin || isCompanyAdmin,
-      canViewAllCompanies: isSuperAdmin,
-    };
-  }, [role]);
-  
-  // Funzione per verificare se l'utente ha uno specifico ruolo
-  function hasRole(...allowedRoles: UserRole[]): boolean {
-    return role ? allowedRoles.includes(role) : false;
+  const role = user?.role ?? null;
+  const permissions = useMemo(
+    () => ({
+      isAdmin: true,
+      canAccessLeads: true,
+      canAccessSettings: true,
+    }),
+    [],
+  );
+  function hasRole(..._allowedRoles: UserRole[]): boolean {
+    return !!role;
   }
-  
-  return {
-    role,
-    ...permissions,
-    hasRole,
-  };
+  return { role, ...permissions, hasRole };
 }

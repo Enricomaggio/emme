@@ -1,6 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import bcrypt from "bcryptjs";
 import * as schema from "@shared/schema";
+import { PIPELINE_STAGES_FIXED } from "@shared/schema";
 
 const { Pool } = pg;
 
@@ -13,271 +15,314 @@ if (!process.env.DATABASE_URL) {
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
+// Tabelle obsolete da rimuovere se presenti (eredità GDM Lattonerie)
+const OBSOLETE_TABLES = [
+  "work_order_items",
+  "work_orders",
+  "quote_items",
+  "quotes",
+  "articles",
+  "material_finishes",
+  "material_thicknesses",
+  "materials",
+  "catalog_articles",
+  "article_families",
+  "labor_rates",
+  "products",
+  "raw_materials",
+  "external_engineers",
+  "payment_methods",
+  "lead_sources",
+  "sales_targets",
+  "activity_logs",
+  "creditsafe_reports",
+  "invites",
+  "user_companies",
+  "companies",
+  "notification_preferences",
+];
+
+const OBSOLETE_LEAD_COLUMNS = [
+  "company_id",
+  "assigned_to_user_id",
+  "company_nature",
+  "ipa_code",
+  "payment_method_id",
+  "reliability",
+  "brochure_sent",
+  "superbill_client_id",
+];
+
+const OBSOLETE_OPPORTUNITY_COLUMNS = [
+  "company_id",
+  "assigned_to_user_id",
+  "site_address",
+  "site_city",
+  "site_zip",
+  "site_province",
+  "maps_link",
+  "site_distance_km",
+  "site_squadra_in_zona_km",
+  "venice_zone",
+  "site_latitude",
+  "site_longitude",
+  "site_quality",
+  "sopralluogo_fatto",
+  "site_status",
+  "quote_sent_at",
+  "quote_reminder_snoozed_until",
+  "photo_notification_scheduled_at",
+  "photo_notification_sent_at",
+];
+
+const OBSOLETE_PIPELINE_COLUMNS = ["company_id"];
+const OBSOLETE_REMINDER_COLUMNS = ["company_id", "user_id"];
+const OBSOLETE_NOTIFICATION_COLUMNS = ["company_id", "user_id"];
+
 export async function bootstrapDatabase(): Promise<void> {
   const client = await pool.connect();
   try {
+    // 1) Drop tabelle obsolete eredità GDM
+    for (const t of OBSOLETE_TABLES) {
+      await client.query(`DROP TABLE IF EXISTS "${t}" CASCADE;`);
+    }
+
+    // 2) Create tabelle EMME (idempotente)
     await client.query(`
-      UPDATE opportunities o
-      SET won_at = o.updated_at
-      FROM pipeline_stages ps
-      WHERE o.stage_id = ps.id
-        AND ps.name = 'Vinto'
-        AND o.won_at IS NULL;
-    `);
-    await client.query(`
-      UPDATE opportunities o
-      SET lost_at = o.updated_at
-      FROM pipeline_stages ps
-      WHERE o.stage_id = ps.id
-        AND ps.name = 'Perso'
-        AND o.lost_at IS NULL;
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        email VARCHAR UNIQUE NOT NULL,
+        password VARCHAR NOT NULL,
+        first_name VARCHAR NOT NULL,
+        last_name VARCHAR NOT NULL,
+        profile_image_url VARCHAR,
+        profile_image_data TEXT,
+        role VARCHAR NOT NULL DEFAULT 'ADMIN',
+        status VARCHAR NOT NULL DEFAULT 'ACTIVE',
+        failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+        locked_until TIMESTAMP,
+        display_name VARCHAR,
+        contact_email VARCHAR,
+        phone VARCHAR,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
     `);
 
     await client.query(`
-      ALTER TABLE opportunities
-        ADD COLUMN IF NOT EXISTS quote_sent_at TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS quote_reminder_snoozed_until TIMESTAMP;
+      CREATE TABLE IF NOT EXISTS sessions (
+        sid VARCHAR PRIMARY KEY,
+        sess JSONB NOT NULL,
+        expire TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON sessions (expire);
     `);
 
     await client.query(`
-      UPDATE opportunities o
-      SET quote_sent_at = o.updated_at
-      FROM pipeline_stages ps
-      WHERE o.stage_id = ps.id
-        AND ps.name = 'Preventivo Inviato'
-        AND o.quote_sent_at IS NULL;
+      CREATE TABLE IF NOT EXISTS pipeline_stages (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL UNIQUE,
+        "order" INTEGER NOT NULL DEFAULT 0,
+        color TEXT NOT NULL DEFAULT '#4563FF',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS pipeline_stages_order_idx ON pipeline_stages ("order");
     `);
 
-    // Migration 0002: brochure_sent on leads
     await client.query(`
-      ALTER TABLE "leads"
-        ADD COLUMN IF NOT EXISTS "brochure_sent" boolean DEFAULT false;
+      CREATE TABLE IF NOT EXISTS leads (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        entity_type TEXT NOT NULL DEFAULT 'COMPANY',
+        type TEXT NOT NULL DEFAULT 'lead',
+        name TEXT,
+        first_name TEXT,
+        last_name TEXT,
+        email TEXT,
+        phone TEXT,
+        address TEXT,
+        city TEXT,
+        zip_code TEXT,
+        province TEXT,
+        country TEXT DEFAULT 'Italia',
+        vat_number TEXT,
+        fiscal_code TEXT,
+        sdi_code TEXT,
+        pec_email TEXT,
+        source TEXT,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS leads_type_idx ON leads (type);
+      CREATE INDEX IF NOT EXISTS leads_entity_type_idx ON leads (entity_type);
     `);
 
-    // Migration 0003: is_automatic on reminders
     await client.query(`
-      ALTER TABLE "reminders"
-        ADD COLUMN IF NOT EXISTS "is_automatic" boolean NOT NULL DEFAULT false;
+      CREATE TABLE IF NOT EXISTS contact_referents (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        first_name TEXT,
+        last_name TEXT,
+        email TEXT,
+        phone TEXT,
+        role TEXT,
+        contact_id VARCHAR NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS contact_referents_contact_id_idx ON contact_referents (contact_id);
     `);
 
-    // Migration 0004: unique constraint on quotes (company_id, number)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS opportunities (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        title TEXT NOT NULL,
+        description TEXT,
+        value NUMERIC,
+        contract_total NUMERIC,
+        invoiced_amount NUMERIC NOT NULL DEFAULT 0,
+        stage_id VARCHAR REFERENCES pipeline_stages(id),
+        lead_id VARCHAR NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        referent_id VARCHAR REFERENCES contact_referents(id) ON DELETE SET NULL,
+        lost_reason TEXT,
+        estimated_start_date TIMESTAMP,
+        estimated_end_date TIMESTAMP,
+        expected_close_date TIMESTAMP,
+        probability INTEGER DEFAULT 50,
+        won_at TIMESTAMP,
+        lost_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS opportunities_lead_id_idx ON opportunities (lead_id);
+      CREATE INDEX IF NOT EXISTS opportunities_stage_id_idx ON opportunities (stage_id);
+      CREATE INDEX IF NOT EXISTS opportunities_referent_id_idx ON opportunities (referent_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS opportunity_milestones (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        opportunity_id VARCHAR NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+        amount NUMERIC(10, 2) NOT NULL,
+        invoice_date TIMESTAMP,
+        payment_date TIMESTAMP,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS opportunity_milestones_opportunity_id_idx ON opportunity_milestones (opportunity_id);
+      CREATE INDEX IF NOT EXISTS opportunity_milestones_status_idx ON opportunity_milestones (status);
+      CREATE INDEX IF NOT EXISTS opportunity_milestones_invoice_date_idx ON opportunity_milestones (invoice_date);
+      CREATE INDEX IF NOT EXISTS opportunity_milestones_payment_date_idx ON opportunity_milestones (payment_date);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS reminders (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        title TEXT NOT NULL,
+        description TEXT,
+        due_date TIMESTAMP NOT NULL,
+        completed BOOLEAN NOT NULL DEFAULT false,
+        completed_at TIMESTAMP,
+        lead_id VARCHAR REFERENCES leads(id) ON DELETE CASCADE,
+        opportunity_id VARCHAR REFERENCES opportunities(id) ON DELETE CASCADE,
+        is_automatic BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS reminders_due_date_idx ON reminders (due_date);
+      CREATE INDEX IF NOT EXISTS reminders_lead_id_idx ON reminders (lead_id);
+      CREATE INDEX IF NOT EXISTS reminders_opportunity_id_idx ON reminders (opportunity_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        link TEXT,
+        is_read BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS notifications_is_read_idx ON notifications (is_read);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token VARCHAR UNIQUE NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS password_reset_tokens_token_idx ON password_reset_tokens (token);
+      CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id_idx ON password_reset_tokens (user_id);
+    `);
+
+    // 3) Drop colonne obsolete su tabelle ereditate da GDM (idempotente)
+    for (const col of OBSOLETE_LEAD_COLUMNS) {
+      await client.query(`ALTER TABLE leads DROP COLUMN IF EXISTS "${col}";`);
+    }
+    for (const col of OBSOLETE_OPPORTUNITY_COLUMNS) {
+      await client.query(`ALTER TABLE opportunities DROP COLUMN IF EXISTS "${col}";`);
+    }
+    for (const col of OBSOLETE_PIPELINE_COLUMNS) {
+      await client.query(`ALTER TABLE pipeline_stages DROP COLUMN IF EXISTS "${col}";`);
+    }
+    for (const col of OBSOLETE_REMINDER_COLUMNS) {
+      await client.query(`ALTER TABLE reminders DROP COLUMN IF EXISTS "${col}";`);
+    }
+    for (const col of OBSOLETE_NOTIFICATION_COLUMNS) {
+      await client.query(`ALTER TABLE notifications DROP COLUMN IF EXISTS "${col}";`);
+    }
+
+    // 4) Vincolo unique sulla colonna name di pipeline_stages
     await client.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
           SELECT 1 FROM pg_constraint
-          WHERE conname = 'quotes_company_id_number_unique'
-            AND conrelid = 'quotes'::regclass
+          WHERE conname = 'pipeline_stages_name_unique'
         ) THEN
           BEGIN
-            ALTER TABLE quotes
-              ADD CONSTRAINT quotes_company_id_number_unique UNIQUE (company_id, number);
-          EXCEPTION
-            WHEN unique_violation THEN
-              NULL;
+            ALTER TABLE pipeline_stages ADD CONSTRAINT pipeline_stages_name_unique UNIQUE (name);
+          EXCEPTION WHEN unique_violation THEN
+            NULL;
           END;
         END IF;
-      END
-      $$;
+      END $$;
     `);
 
+    // 5) Seed pipeline_stages fissi
+    for (const s of PIPELINE_STAGES_FIXED) {
+      await client.query(
+        `INSERT INTO pipeline_stages (name, "order", color)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (name) DO UPDATE SET "order" = EXCLUDED."order", color = EXCLUDED.color;`,
+        [s.name, s.order, s.color]
+      );
+    }
+    // Allinea: rimuovi eventuali stadi vecchi GDM rimasti
+    await client.query(
+      `DELETE FROM pipeline_stages
+       WHERE name NOT IN (${PIPELINE_STAGES_FIXED.map((_, i) => `$${i + 1}`).join(", ")});`,
+      PIPELINE_STAGES_FIXED.map((s) => s.name)
+    );
 
-    // Migration 0018: photo notification scheduling fields on opportunities
-    await client.query(`
-      ALTER TABLE opportunities
-        ADD COLUMN IF NOT EXISTS photo_notification_scheduled_at TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS photo_notification_sent_at TIMESTAMP;
-    `);
-
-    // Migration 0025: Catalogo Lattoneria — sostituisce raw_materials e products con
-    // materials, material_thicknesses, catalog_articles, labor_rates.
-    // Drop old catalog tables (products dipende da raw_materials, droppare prima products).
-    await client.query(`DROP TABLE IF EXISTS products CASCADE;`);
-    await client.query(`DROP TABLE IF EXISTS raw_materials CASCADE;`);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS materials (
-        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT NOT NULL,
-        density NUMERIC(12, 4) NOT NULL DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+    // 6) Seed utente iniziale (Enrico) se nessun utente esiste
+    const userCount = await client.query(`SELECT COUNT(*)::int AS n FROM users;`);
+    if (userCount.rows[0].n === 0) {
+      const email = process.env.INITIAL_USER_EMAIL || "enrico@emme.local";
+      const plain = process.env.INITIAL_USER_PASSWORD || "ChangeMe2026!";
+      const hash = await bcrypt.hash(plain, 10);
+      await client.query(
+        `INSERT INTO users (email, password, first_name, last_name, role, status)
+         VALUES ($1, $2, $3, $4, 'ADMIN', 'ACTIVE');`,
+        [email, hash, "Enrico", "Maggiolo"]
       );
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS material_thicknesses (
-        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-        material_id VARCHAR NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
-        thickness_mm NUMERIC(8, 3) NOT NULL,
-        cost_per_kg NUMERIC(12, 4) NOT NULL DEFAULT 0,
-        margin_percent NUMERIC(6, 2) NOT NULL DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS material_thicknesses_material_id_idx ON material_thicknesses (material_id);
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS catalog_articles (
-        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT NOT NULL,
-        unit_cost NUMERIC(12, 4) NOT NULL DEFAULT 0,
-        margin_percent NUMERIC(6, 2) NOT NULL DEFAULT 0,
-        unit_of_measure TEXT NOT NULL DEFAULT 'pz',
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS labor_rates (
-        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT NOT NULL,
-        cost_per_day NUMERIC(12, 2) NOT NULL DEFAULT 0,
-        margin_percent NUMERIC(6, 2) NOT NULL DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-
-    // Migration 0026: Preventivatore Lattoneria — colonne nuove su quotes/quote_items
-    await client.query(`
-      ALTER TABLE quotes
-        ADD COLUMN IF NOT EXISTS subject TEXT,
-        ADD COLUMN IF NOT EXISTS notes TEXT;
-    `);
-    await client.query(`
-      ALTER TABLE quotes
-        ALTER COLUMN global_params DROP NOT NULL;
-    `);
-    await client.query(`
-      ALTER TABLE quote_items
-        ALTER COLUMN article_id DROP NOT NULL;
-    `);
-    // Rinomina development_mm → development_cm (idempotente). Lo sviluppo è
-    // sempre stato inserito in cm dalla UI; solo il nome della colonna era
-    // disallineato. Il valore non viene trasformato.
-    await client.query(`
-      DO $$
-      BEGIN
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'quote_items' AND column_name = 'development_mm'
-        ) AND NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'quote_items' AND column_name = 'development_cm'
-        ) THEN
-          ALTER TABLE quote_items RENAME COLUMN development_mm TO development_cm;
-        END IF;
-      END
-      $$;
-    `);
-    await client.query(`
-      ALTER TABLE quote_items
-        ADD COLUMN IF NOT EXISTS type TEXT,
-        ADD COLUMN IF NOT EXISTS material_id VARCHAR REFERENCES materials(id),
-        ADD COLUMN IF NOT EXISTS material_thickness_id VARCHAR REFERENCES material_thicknesses(id),
-        ADD COLUMN IF NOT EXISTS catalog_article_id VARCHAR REFERENCES catalog_articles(id),
-        ADD COLUMN IF NOT EXISTS labor_rate_id VARCHAR REFERENCES labor_rates(id),
-        ADD COLUMN IF NOT EXISTS description TEXT,
-        ADD COLUMN IF NOT EXISTS unit_of_measure TEXT,
-        ADD COLUMN IF NOT EXISTS development_cm NUMERIC(12, 3),
-        ADD COLUMN IF NOT EXISTS weight_kg NUMERIC(12, 4),
-        ADD COLUMN IF NOT EXISTS unit_cost NUMERIC(12, 4),
-        ADD COLUMN IF NOT EXISTS margin_percent NUMERIC(6, 2),
-        ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS quote_items_type_idx ON quote_items (type);
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS quote_items_display_order_idx ON quote_items (display_order);
-    `);
-
-    // Migration 0027: colonne nota lavori su quotes e quote_items
-    await client.query(`
-      ALTER TABLE quotes
-        ADD COLUMN IF NOT EXISTS work_order_notes TEXT,
-        ADD COLUMN IF NOT EXISTS work_order_sent_at TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS work_order_confirmed_at TIMESTAMP;
-    `);
-    await client.query(`
-      ALTER TABLE quote_items
-        ADD COLUMN IF NOT EXISTS work_order_quantity_override NUMERIC;
-    `);
-
-    // Migration 0028: stadi pipeline post-vendita (Cantiere in corso, Nota Lavori, Da Fatturare)
-    await client.query(`
-      INSERT INTO pipeline_stages (id, name, "order", color, company_id, created_at)
-      SELECT gen_random_uuid(), 'Cantiere in corso', 7, '#F97316', c.id, NOW()
-      FROM companies c
-      WHERE NOT EXISTS (
-        SELECT 1 FROM pipeline_stages ps WHERE ps.company_id = c.id AND ps.name = 'Cantiere in corso'
-      );
-    `);
-    await client.query(`
-      INSERT INTO pipeline_stages (id, name, "order", color, company_id, created_at)
-      SELECT gen_random_uuid(), 'Nota Lavori da Inviare', 8, '#6366F1', c.id, NOW()
-      FROM companies c
-      WHERE NOT EXISTS (
-        SELECT 1 FROM pipeline_stages ps WHERE ps.company_id = c.id AND ps.name = 'Nota Lavori da Inviare'
-      );
-    `);
-    await client.query(`
-      INSERT INTO pipeline_stages (id, name, "order", color, company_id, created_at)
-      SELECT gen_random_uuid(), 'Nota Lavori Inviata', 9, '#8B5CF6', c.id, NOW()
-      FROM companies c
-      WHERE NOT EXISTS (
-        SELECT 1 FROM pipeline_stages ps WHERE ps.company_id = c.id AND ps.name = 'Nota Lavori Inviata'
-      );
-    `);
-    await client.query(`
-      INSERT INTO pipeline_stages (id, name, "order", color, company_id, created_at)
-      SELECT gen_random_uuid(), 'Da Fatturare', 10, '#059669', c.id, NOW()
-      FROM companies c
-      WHERE NOT EXISTS (
-        SELECT 1 FROM pipeline_stages ps WHERE ps.company_id = c.id AND ps.name = 'Da Fatturare'
-      );
-    `);
-
-    // Migration 0029: tabelle dedicate nota lavori (work_orders, work_order_items)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS work_orders (
-        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-        company_id VARCHAR NOT NULL REFERENCES companies(id),
-        opportunity_id VARCHAR NOT NULL REFERENCES opportunities(id),
-        quote_id VARCHAR REFERENCES quotes(id),
-        number TEXT NOT NULL,
-        subject TEXT,
-        notes TEXT,
-        total_amount NUMERIC NOT NULL DEFAULT 0,
-        status TEXT NOT NULL DEFAULT 'DRAFT',
-        sent_at TIMESTAMP,
-        confirmed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS work_orders_company_id_idx ON work_orders(company_id);
-      CREATE INDEX IF NOT EXISTS work_orders_opportunity_id_idx ON work_orders(opportunity_id);
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS work_order_items (
-        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-        work_order_id VARCHAR NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
-        description TEXT NOT NULL DEFAULT '',
-        unit_of_measure TEXT NOT NULL DEFAULT 'ml',
-        quantity NUMERIC NOT NULL DEFAULT 0,
-        unit_price NUMERIC NOT NULL DEFAULT 0,
-        total_row NUMERIC NOT NULL DEFAULT 0,
-        display_order INTEGER NOT NULL DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS work_order_items_work_order_id_idx ON work_order_items(work_order_id);
-    `);
+      console.log(`[bootstrap] Utente iniziale creato: ${email} / ${plain} (cambia la password al primo login)`);
+    }
   } finally {
     client.release();
   }

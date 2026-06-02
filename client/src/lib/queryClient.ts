@@ -1,6 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getAuthToken } from "./auth";
-import { getSelectedCompanyId } from "./company-context";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -11,17 +10,9 @@ async function throwIfResNotOk(res: Response) {
 
 function buildHeaders(data?: unknown): Record<string, string> {
   const headers: Record<string, string> = {};
-  if (data) {
-    headers["Content-Type"] = "application/json";
-  }
+  if (data) headers["Content-Type"] = "application/json";
   const token = getAuthToken();
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-  const companyId = getSelectedCompanyId();
-  if (companyId) {
-    headers["x-company-id"] = companyId;
-  }
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
 }
 
