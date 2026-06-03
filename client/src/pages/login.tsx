@@ -52,17 +52,11 @@ export default function LoginPage() {
                 <img
                   src="/emme-logo.png"
                   alt={APP_CONFIG.appName}
-                  className="h-16 w-16 object-contain text-glow-blue"
+                  className="h-20 w-20 object-contain text-glow-blue"
                   onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
                 />
               </div>
             </div>
-            <h1
-              className="text-3xl font-bold text-white tracking-tight"
-              style={{ filter: "drop-shadow(0 0 12px rgba(59,130,246,0.5))" }}
-            >
-              {APP_CONFIG.appName}
-            </h1>
             <p className="text-sm text-slate-400 mt-2">Accedi al tuo gestionale</p>
           </div>
 

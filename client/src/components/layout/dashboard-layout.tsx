@@ -159,14 +159,6 @@ export function DashboardLayout({ children, user, fullWidth = false }: Dashboard
                     (e.target as HTMLImageElement).style.display = "none";
                   }}
                 />
-                {!isDesktopCollapsed && (
-                  <span
-                    className="text-xl font-bold text-white tracking-tight"
-                    style={{ filter: "drop-shadow(0 0 8px rgba(59,130,246,0.4))" }}
-                  >
-                    {APP_CONFIG.appName}
-                  </span>
-                )}
               </div>
               <Button
                 variant="ghost"
