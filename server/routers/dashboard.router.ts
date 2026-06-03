@@ -55,14 +55,14 @@ dashboardRouter.get("/dashboard", isAuthenticated, async (req, res) => {
     `);
 
     // ============ VALORE PIPELINE PER STADIO ============
-    // Per ogni stadio "aperto" (non chiuso vinto/perso), somma il valore delle opportunità.
-    // Per pipeline aperta intendiamo: tutti gli stadi tranne "Completato" o opp con lostAt.
+    // Per ogni stadio, somma valore e conteggio delle opportunità che ci stanno dentro
+    // (coerente con la pipeline UI: nessun filtro su wonAt/lostAt).
     const pipelineByStage = await db.execute(sql`
       SELECT ps.id, ps.name, ps."order", ps.color,
              COUNT(o.id)::int AS opportunity_count,
              COALESCE(SUM(o.value), 0)::numeric AS total_value
       FROM pipeline_stages ps
-      LEFT JOIN opportunities o ON o.stage_id = ps.id AND o.lost_at IS NULL
+      LEFT JOIN opportunities o ON o.stage_id = ps.id
       GROUP BY ps.id, ps.name, ps."order", ps.color
       ORDER BY ps."order"
     `);
@@ -92,11 +92,18 @@ dashboardRouter.get("/dashboard", isAuthenticated, async (req, res) => {
     `);
 
     // ============ COUNT CLIENTI/OPPORTUNITÀ ============
+    // I conteggi usano lo stadio corrente (coerente con la pipeline UI), non i flag wonAt/lostAt.
     const counts = await db.execute(sql`
       SELECT
         (SELECT COUNT(*) FROM leads)::int AS leads_total,
-        (SELECT COUNT(*) FROM opportunities WHERE lost_at IS NULL AND won_at IS NULL)::int AS opportunities_open,
-        (SELECT COUNT(*) FROM opportunities WHERE won_at IS NOT NULL)::int AS opportunities_won
+        (SELECT COUNT(*)
+         FROM opportunities o
+         LEFT JOIN pipeline_stages ps ON ps.id = o.stage_id
+         WHERE ps.name IS NULL OR ps.name NOT IN ('Completato', 'Persa'))::int AS opportunities_open,
+        (SELECT COUNT(*)
+         FROM opportunities o
+         JOIN pipeline_stages ps ON ps.id = o.stage_id
+         WHERE ps.name = 'Completato')::int AS opportunities_won
     `);
 
     const num = (v: unknown) => parseFloat(String(v ?? "0"));

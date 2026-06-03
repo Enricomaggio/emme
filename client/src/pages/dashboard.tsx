@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
-import { AlertTriangle, Calendar, Receipt, Wallet, CircleDollarSign, ClockAlert } from "lucide-react";
+import { AlertTriangle, Calendar, Receipt, Wallet, CircleDollarSign, ClockAlert, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DashboardData {
@@ -173,9 +173,15 @@ export default function DashboardPage() {
     queryKey: ["/api/dashboard"],
   });
 
-  const forfettarioPercent = data?.forfettario.percent || 0;
-  const forfettarioAlert = data?.forfettario.alert || false;
-  const animatedPercent = useCountUp(forfettarioPercent, 1500);
+  const forfettarioThreshold = data?.forfettario.threshold || 100_000;
+  const invoiced = data?.invoicedYTD || 0;
+  const toInvoice = data?.toInvoice || 0;
+  const confirmedTotal = invoiced + toInvoice;
+  const invoicedPercent = Math.min(100, (invoiced / forfettarioThreshold) * 100);
+  const confirmedPercent = Math.min(100, (confirmedTotal / forfettarioThreshold) * 100);
+  const remainingAfterConfirmed = Math.max(0, forfettarioThreshold - confirmedTotal);
+  const forfettarioAlert = confirmedPercent >= 80;
+  const animatedPercent = useCountUp(confirmedPercent, 1500);
 
   return (
     <DashboardLayout user={user || undefined}>
@@ -212,28 +218,51 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-baseline justify-between mb-3">
                 <span className="text-3xl font-bold tabular-nums tracking-tight text-white">
-                  {formatCurrency(data.forfettario.used)}
+                  {formatCurrency(confirmedTotal)}
                 </span>
                 <span className="text-sm text-slate-400 tabular-nums">
-                  su {formatCurrency(data.forfettario.threshold)} ({Math.round(animatedPercent)}%)
+                  su {formatCurrency(forfettarioThreshold)} ({Math.round(animatedPercent)}%)
                 </span>
               </div>
               <div className="relative h-3 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                {/* Segmento "confermato" (fatturato + da fatturare) — opacità ridotta */}
                 <motion.div
                   className={cn(
-                    "h-full rounded-full bg-gradient-to-r",
+                    "absolute top-0 left-0 h-full rounded-full bg-gradient-to-r",
+                    forfettarioAlert
+                      ? "from-amber-500/40 to-red-500/40"
+                      : "from-blue-500/40 to-emerald-500/40",
+                  )}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${confirmedPercent}%` }}
+                  transition={{ duration: 1.2, ease: "easeOut", delay: 0.2 }}
+                />
+                {/* Segmento "fatturato" — pieno, sopra */}
+                <motion.div
+                  className={cn(
+                    "absolute top-0 left-0 h-full rounded-full bg-gradient-to-r",
                     forfettarioAlert
                       ? "from-amber-500 to-red-500 shadow-[0_0_12px_rgba(239,68,68,0.3)]"
                       : "from-blue-500 to-emerald-500",
                   )}
                   initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, forfettarioPercent)}%` }}
+                  animate={{ width: `${invoicedPercent}%` }}
                   transition={{ duration: 1.2, ease: "easeOut", delay: 0.2 }}
                 />
               </div>
-              <p className="text-xs text-slate-400 mt-3 tabular-nums">
-                Restano <span className="text-slate-300 font-medium">{formatCurrency(data.forfettario.remaining)}</span> prima del limite.
-              </p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-slate-400 tabular-nums">
+                <span className="flex items-center gap-1.5">
+                  <span className={cn("inline-block w-2 h-2 rounded-full", forfettarioAlert ? "bg-red-500" : "bg-emerald-500")} />
+                  Fatturato <span className="text-slate-200 font-medium">{formatCurrency(invoiced)}</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className={cn("inline-block w-2 h-2 rounded-full opacity-40", forfettarioAlert ? "bg-red-500" : "bg-emerald-500")} />
+                  Confermato <span className="text-slate-200 font-medium">+{formatCurrency(toInvoice)}</span>
+                </span>
+                <span className="ml-auto">
+                  Restano <span className="text-slate-300 font-medium">{formatCurrency(remainingAfterConfirmed)}</span> prima del limite
+                </span>
+              </div>
             </div>
           </motion.div>
         )}
@@ -241,8 +270,17 @@ export default function DashboardPage() {
         {/* KPI cards */}
         <motion.div
           variants={container}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"
         >
+          <motion.div variants={item}>
+            <KpiCard
+              title="Totale confermato"
+              rawValue={confirmedTotal}
+              icon={TrendingUp}
+              tone="success"
+              isLoading={isLoading}
+            />
+          </motion.div>
           <motion.div variants={item}>
             <KpiCard
               title="Fatturato anno"

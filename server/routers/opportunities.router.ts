@@ -99,6 +99,14 @@ opportunitiesRouter.patch("/opportunities/:id", isAuthenticated, async (req, res
         if (stage.name === "Completato") {
           dataWithTs.wonAt = new Date();
           dataWithTs.lostAt = null;
+          (dataWithTs as any).lostReason = null;
+        } else if (stage.name === "Persa") {
+          dataWithTs.lostAt = new Date();
+          dataWithTs.wonAt = null;
+        } else {
+          dataWithTs.wonAt = null;
+          dataWithTs.lostAt = null;
+          (dataWithTs as any).lostReason = null;
         }
       }
       const opp = await storage.updateOpportunity(req.params.id, dataWithTs);
@@ -121,9 +129,9 @@ opportunitiesRouter.patch("/opportunities/:id", isAuthenticated, async (req, res
 // PUT /api/opportunities/:id/move — sposta in nuovo stage (kanban DnD)
 opportunitiesRouter.put("/opportunities/:id/move", isAuthenticated, async (req, res) => {
   try {
-    const { stageId } = req.body;
+    const { stageId, lostReason } = req.body;
     if (!stageId) return res.status(400).json({ message: "stageId obbligatorio" });
-    const opportunity = await storage.moveOpportunityToStage(req.params.id, stageId);
+    const opportunity = await storage.moveOpportunityToStage(req.params.id, stageId, lostReason ?? null);
     if (!opportunity) return res.status(404).json({ message: "Opportunità o fase non trovati" });
     res.json(opportunity);
   } catch (error) {

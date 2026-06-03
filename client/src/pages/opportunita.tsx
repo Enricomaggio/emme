@@ -33,8 +33,24 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { cn } from "@/lib/utils";
-import { Plus, Trash2, Target } from "lucide-react";
-import type { Opportunity, PipelineStage, OpportunityMilestone, Lead } from "@shared/schema";
+import { Plus, Trash2, Target, ChevronLeft, ChevronRight, Minimize2 } from "lucide-react";
+import type { Opportunity, PipelineStage, OpportunityMilestone, Lead, LostReason } from "@shared/schema";
+
+const LOST_REASON_LABELS: Record<LostReason, string> = {
+  PRICE_HIGH: "Prezzo troppo alto",
+  TIMING: "Tempistiche non compatibili",
+  LOST_TO_COMPETITOR: "Perso vs concorrenza",
+  NOT_IN_TARGET: "Fuori target",
+  NO_RESPONSE: "Nessuna risposta",
+  OTHER: "Altro",
+};
+
+function formatLostReason(raw: string | null | undefined): string {
+  if (!raw) return "";
+  if (raw.startsWith("OTHER:")) return raw.slice("OTHER:".length).trim();
+  const key = raw as LostReason;
+  return LOST_REASON_LABELS[key] || raw;
+}
 
 type OpportunityWithExtras = Opportunity & {
   referentName?: string | null;
@@ -49,6 +65,44 @@ export default function OpportunitaPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [openCreate, setOpenCreate] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [lostPrompt, setLostPrompt] = useState<{ oppId: string; stageId: string } | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem("pipeline:collapsed");
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw) as string[];
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("pipeline:collapsed", JSON.stringify(Array.from(collapsed)));
+    } catch {
+      // ignora errori storage (es. modalità privata)
+    }
+  }, [collapsed]);
+
+  function toggleCollapse(stageId: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      return next;
+    });
+  }
+
+  function collapseEmpty() {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      for (const s of stages) {
+        if ((oppsByStage.get(s.id)?.length || 0) === 0) next.add(s.id);
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(search);
@@ -72,8 +126,8 @@ export default function OpportunitaPage() {
   const leadsById = useMemo(() => new Map(leads.map((l) => [l.id, l])), [leads]);
 
   const move = useMutation({
-    mutationFn: async ({ id, stageId }: { id: string; stageId: string }) => {
-      await apiRequest("PUT", `/api/opportunities/${id}/move`, { stageId });
+    mutationFn: async ({ id, stageId, lostReason }: { id: string; stageId: string; lostReason?: string | null }) => {
+      await apiRequest("PUT", `/api/opportunities/${id}/move`, { stageId, lostReason: lostReason ?? null });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/opportunities"] });
@@ -91,6 +145,11 @@ export default function OpportunitaPage() {
     if (!stageId) return;
     const opp = opps.find((o) => o.id === oppId);
     if (!opp || opp.stageId === stageId) return;
+    const targetStage = stages.find((s) => s.id === stageId);
+    if (targetStage?.name === "Persa") {
+      setLostPrompt({ oppId, stageId });
+      return;
+    }
     move.mutate({ id: oppId, stageId });
   }
 
@@ -114,12 +173,23 @@ export default function OpportunitaPage() {
             </h1>
             <p className="text-sm text-slate-400">{opps.length} opportunità</p>
           </div>
-          <Button
-            onClick={() => setOpenCreate(true)}
-            className="bg-blue-600 hover:bg-blue-700 active:scale-[0.98] hover:shadow-[0_0_16px_rgba(59,130,246,0.3)] transition-all duration-150 text-white"
-          >
-            <Plus className="w-4 h-4 mr-1" /> Nuova opportunità
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={collapseEmpty}
+              className="border-white/[0.08] bg-white/[0.02] text-slate-300 hover:bg-white/[0.05] hover:text-white"
+              title="Collassa tutte le colonne vuote"
+            >
+              <Minimize2 className="w-4 h-4 mr-1" /> Collassa vuote
+            </Button>
+            <Button
+              onClick={() => setOpenCreate(true)}
+              className="bg-blue-600 hover:bg-blue-700 active:scale-[0.98] hover:shadow-[0_0_16px_rgba(59,130,246,0.3)] transition-all duration-150 text-white"
+            >
+              <Plus className="w-4 h-4 mr-1" /> Nuova opportunità
+            </Button>
+          </div>
         </div>
 
         <DndContext
@@ -136,6 +206,8 @@ export default function OpportunitaPage() {
                 opps={oppsByStage.get(stage.id) || []}
                 leadNameOf={leadNameOf}
                 onCardClick={(id) => setOpenId(id)}
+                isCollapsed={collapsed.has(stage.id)}
+                onToggleCollapse={() => toggleCollapse(stage.id)}
               />
             ))}
           </div>
@@ -173,7 +245,74 @@ export default function OpportunitaPage() {
           }}
         />
       )}
+
+      {lostPrompt && (
+        <LostReasonDialog
+          onCancel={() => setLostPrompt(null)}
+          onConfirm={(reason) => {
+            move.mutate({ id: lostPrompt.oppId, stageId: lostPrompt.stageId, lostReason: reason });
+            setLostPrompt(null);
+          }}
+        />
+      )}
     </DashboardLayout>
+  );
+}
+
+function LostReasonDialog({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const [code, setCode] = useState<LostReason | "">("");
+  const [other, setOther] = useState("");
+  const canConfirm = code && (code !== "OTHER" || other.trim().length > 0);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Motivo della perdita</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>Seleziona motivazione</Label>
+            <Select value={code} onValueChange={(v) => setCode(v as LostReason)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Scegli un motivo" />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(LOST_REASON_LABELS) as LostReason[]).map((k) => (
+                  <SelectItem key={k} value={k}>{LOST_REASON_LABELS[k]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {code === "OTHER" && (
+            <div className="space-y-1">
+              <Label>Specifica</Label>
+              <Textarea
+                value={other}
+                onChange={(e) => setOther(e.target.value)}
+                placeholder="Descrivi il motivo"
+                rows={3}
+              />
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>Annulla</Button>
+          <Button
+            disabled={!canConfirm}
+            onClick={() => onConfirm(code === "OTHER" ? `OTHER:${other.trim()}` : (code as string))}
+          >
+            Conferma
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -182,14 +321,55 @@ function Column({
   opps,
   leadNameOf,
   onCardClick,
+  isCollapsed,
+  onToggleCollapse,
 }: {
   stage: PipelineStage;
   opps: OpportunityWithExtras[];
   leadNameOf: (id: string) => string;
   onCardClick: (id: string) => void;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const total = opps.reduce((sum, o) => sum + (o.value ? parseFloat(o.value) : 0), 0);
+
+  if (isCollapsed) {
+    return (
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "shrink-0 w-12 bg-white/[0.02] border border-white/[0.05] rounded-xl p-2 flex flex-col items-center gap-2 cursor-pointer transition-all duration-200 hover:bg-white/[0.04]",
+          isOver && "border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.15)] bg-blue-500/[0.03]",
+        )}
+        onClick={onToggleCollapse}
+        title={`Espandi ${stage.name}`}
+      >
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}
+          className="text-slate-400 hover:text-white transition-colors"
+          aria-label="Espandi colonna"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+        <span
+          className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]"
+          style={{ background: stage.color, color: stage.color }}
+        />
+        <Badge variant="secondary" className="text-xs bg-white/[0.05] text-slate-300 border-white/[0.06]">
+          {opps.length}
+        </Badge>
+        <div className="flex-1 flex items-center justify-center min-h-[80px]">
+          <span
+            className="text-xs font-medium text-slate-300 whitespace-nowrap"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            {stage.name}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -200,12 +380,20 @@ function Column({
       )}
     >
       <div className="flex items-center justify-between px-1 py-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={onToggleCollapse}
+            className="text-slate-500 hover:text-slate-200 transition-colors shrink-0"
+            aria-label="Collassa colonna"
+            title="Collassa"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
           <span
-            className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]"
+            className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor] shrink-0"
             style={{ background: stage.color, color: stage.color }}
           />
-          <span className="font-medium text-sm text-slate-200">{stage.name}</span>
+          <span className="font-medium text-sm text-slate-200 truncate">{stage.name}</span>
           <Badge variant="secondary" className="text-xs bg-white/[0.05] text-slate-300 border-white/[0.06]">
             {opps.length}
           </Badge>
@@ -287,6 +475,11 @@ function OppCard({
         {parseFloat(opp.invoicedAmount || "0") > 0 && (
           <p className="text-xs text-emerald-400 tabular-nums">
             Fatturato: € {formatCurrency(parseFloat(opp.invoicedAmount))}
+          </p>
+        )}
+        {opp.lostReason && (
+          <p className="text-xs text-red-300/80 line-clamp-2 italic">
+            {formatLostReason(opp.lostReason)}
           </p>
         )}
       </CardContent>
@@ -493,6 +686,30 @@ function OpportunityInfo({
   const [expectedClose, setExpectedClose] = useState(
     opp.expectedCloseDate ? new Date(opp.expectedCloseDate).toISOString().slice(0, 10) : "",
   );
+  const [lostPromptOpen, setLostPromptOpen] = useState(false);
+
+  const lostStage = stages.find((s) => s.name === "Persa");
+  const isTransitionToLost = lostStage && stageId === lostStage.id && opp.stageId !== lostStage.id;
+
+  function commit(extra?: { lostReason?: string | null }) {
+    update({
+      title,
+      description: description || null,
+      value: value || null,
+      contractTotal: contractTotal || null,
+      stageId: stageId || null,
+      expectedCloseDate: expectedClose ? new Date(expectedClose).toISOString() : null,
+      ...(extra || {}),
+    });
+  }
+
+  function handleSave() {
+    if (isTransitionToLost) {
+      setLostPromptOpen(true);
+      return;
+    }
+    commit();
+  }
 
   return (
     <div className="space-y-3">
@@ -541,22 +758,29 @@ function OpportunityInfo({
           <p className="font-semibold text-emerald-600">€ {formatCurrency(parseFloat(opp.invoicedAmount || "0"))}</p>
         </div>
         {opp.wonAt && <div><Badge>Completata</Badge></div>}
+        {opp.lostAt && <div><Badge variant="destructive">Persa</Badge></div>}
       </div>
-      <Button
-        onClick={() =>
-          update({
-            title,
-            description: description || null,
-            value: value || null,
-            contractTotal: contractTotal || null,
-            stageId: stageId || null,
-            expectedCloseDate: expectedClose ? new Date(expectedClose).toISOString() : null,
-          })
-        }
-        disabled={updating}
-      >
+      {opp.lostReason && (
+        <div className="rounded-md border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-xs text-red-200">
+          <span className="font-medium">Motivo perdita:</span> {formatLostReason(opp.lostReason)}
+        </div>
+      )}
+      <Button onClick={handleSave} disabled={updating}>
         {updating ? "Salvataggio..." : "Salva"}
       </Button>
+
+      {lostPromptOpen && (
+        <LostReasonDialog
+          onCancel={() => {
+            setLostPromptOpen(false);
+            setStageId(opp.stageId || "");
+          }}
+          onConfirm={(reason) => {
+            setLostPromptOpen(false);
+            commit({ lostReason: reason });
+          }}
+        />
+      )}
     </div>
   );
 }

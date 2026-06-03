@@ -69,7 +69,7 @@ export const pipelineStorage = {
     return result.length > 0;
   },
 
-  async moveOpportunityToStage(opportunityId: string, stageId: string): Promise<Opportunity | undefined> {
+  async moveOpportunityToStage(opportunityId: string, stageId: string, lostReason?: string | null): Promise<Opportunity | undefined> {
     const stage = await pipelineStorage.getStage(stageId);
     if (!stage) return undefined;
 
@@ -80,8 +80,16 @@ export const pipelineStorage = {
     if (stage.name === "Completato") {
       updateFields.wonAt = now;
       updateFields.lostAt = null;
+      updateFields.lostReason = null;
+    } else if (stage.name === "Persa") {
+      updateFields.lostAt = now;
+      updateFields.wonAt = null;
+      if (lostReason !== undefined) updateFields.lostReason = lostReason;
     } else {
-      // Stadio non terminale: lasciamo wonAt/lostAt invariati
+      // Esce da uno stadio terminale: azzera entrambi i flag esito
+      updateFields.wonAt = null;
+      updateFields.lostAt = null;
+      updateFields.lostReason = null;
     }
 
     const [opp] = await db

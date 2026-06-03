@@ -9,16 +9,17 @@ import { users } from "./models/auth";
 
 // ============ PIPELINE ============
 
-// I 7 stadi fissi della pipeline EMME (non configurabili dall'utente).
+// Gli 8 stadi fissi della pipeline EMME (non configurabili dall'utente).
 // Persistono in DB come righe seedate al bootstrap.
 export const PIPELINE_STAGES_FIXED = [
-  { name: "Lead",               order: 1, color: "#94A3B8" },
-  { name: "Analisi",             order: 2, color: "#4563FF" },
-  { name: "Preventivo inviato",  order: 3, color: "#F59E0B" },
-  { name: "Trattativa",          order: 4, color: "#A855F7" },
-  { name: "Contratto firmato",   order: 5, color: "#10B981" },
-  { name: "In sviluppo",         order: 6, color: "#0EA5E9" },
-  { name: "Completato",          order: 7, color: "#059669" },
+  { name: "Nuova opportunità",    order: 1, color: "#94A3B8" },
+  { name: "Appuntamento fissato", order: 2, color: "#06B6D4" },
+  { name: "Analisi",              order: 3, color: "#4563FF" },
+  { name: "Preventivo consegnato",order: 4, color: "#A855F7" },
+  { name: "Contratto firmato",    order: 5, color: "#10B981" },
+  { name: "Persa",                order: 6, color: "#EF4444" },
+  { name: "In sviluppo",          order: 7, color: "#0EA5E9" },
+  { name: "Completato",           order: 8, color: "#059669" },
 ] as const;
 
 export type FixedStageName = typeof PIPELINE_STAGES_FIXED[number]["name"];

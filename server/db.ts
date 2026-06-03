@@ -294,6 +294,27 @@ export async function bootstrapDatabase(): Promise<void> {
       END $$;
     `);
 
+    // 4.5) Migrazione pipeline_stages EMME v2 (8 stadi)
+    // Rinomina Lead → Nuova opportunità, Trattativa → Preventivo consegnato,
+    // sposta opp da Preventivo inviato → Preventivo consegnato prima che il
+    // DELETE del passo 5 elimini lo stadio orfano.
+    await client.query(`
+      UPDATE pipeline_stages SET name = 'Nuova opportunità'
+      WHERE name = 'Lead'
+        AND NOT EXISTS (SELECT 1 FROM pipeline_stages WHERE name = 'Nuova opportunità');
+    `);
+    await client.query(`
+      UPDATE pipeline_stages SET name = 'Preventivo consegnato'
+      WHERE name = 'Trattativa'
+        AND NOT EXISTS (SELECT 1 FROM pipeline_stages WHERE name = 'Preventivo consegnato');
+    `);
+    await client.query(`
+      UPDATE opportunities
+      SET stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Preventivo consegnato')
+      WHERE stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Preventivo inviato')
+        AND EXISTS (SELECT 1 FROM pipeline_stages WHERE name = 'Preventivo consegnato');
+    `);
+
     // 5) Seed pipeline_stages fissi
     for (const s of PIPELINE_STAGES_FIXED) {
       await client.query(
