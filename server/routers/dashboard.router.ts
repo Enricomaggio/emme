@@ -2,11 +2,9 @@ import { Router } from "express";
 import { isAuthenticated } from "../auth";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
+import { computeForfettario } from "@shared/forfettario";
 
 export const dashboardRouter = Router();
-
-// La soglia regime forfettario 2026.
-const FORFETTARIO_THRESHOLD = 100_000;
 
 // GET /api/dashboard — KPI principale EMME
 // Tutti gli importi sono in € e calcolati per anno solare corrente.
@@ -112,21 +110,13 @@ dashboardRouter.get("/dashboard", isAuthenticated, async (req, res) => {
     const paidTotal = num(paidYTD.rows[0]?.total);
     const toInvoiceTotal = num(toInvoice.rows[0]?.total);
     const toCollectTotal = num(toCollect.rows[0]?.total);
-    const forfettarioPercent = Math.min(100, Math.round((invoicedTotal / FORFETTARIO_THRESHOLD) * 100));
-
     res.json({
       year,
       invoicedYTD: invoicedTotal,
       paidYTD: paidTotal,
       toInvoice: toInvoiceTotal,
       toCollect: toCollectTotal,
-      forfettario: {
-        threshold: FORFETTARIO_THRESHOLD,
-        used: invoicedTotal,
-        remaining: Math.max(0, FORFETTARIO_THRESHOLD - invoicedTotal),
-        percent: forfettarioPercent,
-        alert: forfettarioPercent >= 80,
-      },
+      forfettario: computeForfettario(invoicedTotal),
       pipelineByStage: pipelineByStage.rows.map((r: any) => ({
         id: r.id,
         name: r.name,

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { AlertTriangle, Calendar, Receipt, Wallet, CircleDollarSign, ClockAlert, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { computeForfettario, FORFETTARIO_THRESHOLD } from "@shared/forfettario";
 
 interface DashboardData {
   year: number;
@@ -173,14 +174,17 @@ export default function DashboardPage() {
     queryKey: ["/api/dashboard"],
   });
 
-  const forfettarioThreshold = data?.forfettario.threshold || 100_000;
+  const forfettarioThreshold = data?.forfettario.threshold || FORFETTARIO_THRESHOLD;
   const invoiced = data?.invoicedYTD || 0;
   const toInvoice = data?.toInvoice || 0;
   const confirmedTotal = invoiced + toInvoice;
+  // Percentuali esatte (float) per le larghezze delle barre — solo presentazione.
   const invoicedPercent = Math.min(100, (invoiced / forfettarioThreshold) * 100);
   const confirmedPercent = Math.min(100, (confirmedTotal / forfettarioThreshold) * 100);
-  const remainingAfterConfirmed = Math.max(0, forfettarioThreshold - confirmedTotal);
-  const forfettarioAlert = confirmedPercent >= 80;
+  // Regola di business (soglia "remaining" e alert) dalla funzione condivisa: unica fonte di verità.
+  const confirmedForfettario = computeForfettario(confirmedTotal, forfettarioThreshold);
+  const remainingAfterConfirmed = confirmedForfettario.remaining;
+  const forfettarioAlert = confirmedForfettario.alert;
   const animatedPercent = useCountUp(confirmedPercent, 1500);
 
   return (

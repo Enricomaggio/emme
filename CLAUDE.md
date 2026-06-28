@@ -39,7 +39,16 @@ Gestisce: clienti → pipeline commerciale → opportunità → milestone di fat
 npm run dev       # Dev server (porta 5001)
 npm run build     # Build produzione
 npm run db:push   # Applica schema Drizzle
+npm test          # Esegue i test vitest (cartella tests/)
 ```
+
+## Test e guardrail (IMPORTANTE)
+
+Questo progetto ha un impianto di test: `vitest` (config in `vitest.config.ts`, test in `tests/`) e un hook **pre-commit** husky che esegue `npm test` — se un test fallisce, il commit viene bloccato.
+
+> **Se questo progetto è stato appena CLONATO per un nuovo cliente** (`cp -r emme ...` dalla skill `setup-app`): dopo aver fatto `git init` nel nuovo repo, esegui **`npx husky`** per riarmare il pre-commit. Lo script `prepare` di `npm install` non lo arma se gira prima del `git init`. Verifica con `git config core.hooksPath` → deve stampare `.husky/_`.
+
+> **Logica di calcolo custom (preventivo, IVA, SAL):** i test non arrivano dalla base — vanno scritti per ogni cliente, in `tests/`. Per moduli `shared/` (solo import di tipi) testa diretto; se la funzione importa `storage`/DB, mockalo con `vi.mock('../server/storage', () => ({ storage: {} }))`.
 
 ## Deploy
 
