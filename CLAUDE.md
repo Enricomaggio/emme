@@ -50,6 +50,14 @@ Questo progetto ha un impianto di test: `vitest` (config in `vitest.config.ts`, 
 
 > **Logica di calcolo custom (preventivo, IVA, SAL):** i test non arrivano dalla base — vanno scritti per ogni cliente, in `tests/`. Per moduli `shared/` (solo import di tipi) testa diretto; se la funzione importa `storage`/DB, mockalo con `vi.mock('../server/storage', () => ({ storage: {} }))`.
 
+## Standard di codice
+
+**Quando scrivere un test.** Domanda unica: *se questa logica dà il risultato sbagliato in silenzio, chi ci rimette e quanto?* SI testa (funzione pura nuova) se calcola: **soldi** (IVA, totali, preventivo, SAL, sconti, arrotondamenti), **isolamento dati** (`companyId`), **soglie/scaglioni**, **macchine a stati**. NON si testa: UI/layout, CRUD banale, codice che fallisce in modo visibile. Regola: testa ciò che fallisce *in silenzio*. Definition of done: la feature che rientra nel trigger nasce col suo test, nello stesso commit, `npm test` verde.
+
+**Organizzazione (anti-drift).** Una feature nuova = un modulo/file nuovo, NON accodare a un file grande esistente. File oltre ~400 righe → spezzare per responsabilità. La logica di calcolo pura va in `shared/` o `server/utils/` (testabile), MAI dentro route handler o componenti React. Un router per dominio. Prima di aggiungere a un'area: "è una responsabilità nuova?" → se sì, file nuovo.
+
+> Dove c'è ESLint, la regola `max-lines` (warn, 400) segnala i file troppo lunghi. I file mostri esistenti non si spezzano in automatico (è giudizio architetturale, sessione dedicata): il guardrail serve a non farli ricrescere.
+
 ## Deploy
 
 - **Hosting:** Railway
